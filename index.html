@@ -2,288 +2,710 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Graph Paper Tic-Tac-Toe</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bracket Maker</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600;700&display=swap">
 <style>
-/* Layout: one centered sheet of graph paper — status line, hand-drawn board, tally-mark scoreboard, controls */
 :root {
-  --paper: #f3f6fa;
-  --grid: #d6e0ec;
-  --ink: #1f2a3a;
-  --muted: #5b6b80;
-  --x: #d4473a;
-  --o: #2763c4;
-  --win: #e8b931;
-  --btn: #ffffff;
-  --display: "Permanent Marker", "Comic Sans MS", cursive;
-  --body: "Atkinson Hyperlegible", system-ui, sans-serif;
+  --bg: #0f1117;
+  --panel: #181b24;
+  --panel2: #20242f;
+  --line: #2c3140;
+  --text: #e9ecf3;
+  --muted: #8a92a6;
+  --accent: #ffb020;
+  --win: #3ddc97;
+  --danger: #ff5d5d;
+  --display: "Bebas Neue", Impact, sans-serif;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --paper: #1d2a26; --grid: #2a3a35; --ink: #eef2ee; --muted: #9fb3ab;
-    --x: #ff8a7a; --o: #8cc3ff; --win: #ffd75e; --btn: #24352f; color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --paper: #1d2a26; --grid: #2a3a35; --ink: #eef2ee; --muted: #9fb3ab;
-  --x: #ff8a7a; --o: #8cc3ff; --win: #ffd75e; --btn: #24352f; color-scheme: dark;
-}
-html, body { min-height: 100%; }
+* { box-sizing: border-box; }
 body {
-  background-color: var(--paper);
-  background-image:
-    linear-gradient(var(--grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
-  background-size: 24px 24px;
-  color: var(--ink);
-  font-family: var(--body);
-  font-size: 16px;
-  padding: 0 16px;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.45 Inter, system-ui, sans-serif;
 }
-main {
-  max-width: 440px; margin: 0 auto; padding-block: 32px 40px;
-  display: flex; flex-direction: column; gap: 20px; align-items: stretch;
+#app { max-width: 1200px; margin: 0 auto; padding: 20px 16px 60px; }
+h1, h2, h3 { margin: 0; }
+.muted { color: var(--muted); }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* Buttons & inputs */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  background: var(--panel2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 14px; font: inherit; font-weight: 600; cursor: pointer;
 }
-h1 {
-  font-family: var(--display); font-weight: 400; font-size: clamp(1.8rem, 7vw, 2.4rem);
-  margin: 0; text-align: center; text-wrap: balance; transform: rotate(-1.5deg);
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #1a1200; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.ghost { background: transparent; }
+.btn.danger { color: var(--danger); }
+.btn.small { padding: 4px 10px; font-size: 13px; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+label.field { display: block; margin-bottom: 12px; font-weight: 600; font-size: 13px; color: var(--muted); }
+input[type=text], input[type=url] {
+  display: block; width: 100%; margin-top: 4px;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 9px 11px; font: inherit;
 }
-h1 .x { color: var(--x); } h1 .o { color: var(--o); }
-.modes { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
-.modes button, .again {
-  font: 700 0.9rem var(--body); color: var(--ink); background: var(--btn);
-  border: 2px solid var(--ink); border-radius: 999px; padding: 6px 14px; cursor: pointer;
+input:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+
+/* Header */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+.logo { font-family: var(--display); font-size: 40px; letter-spacing: 1px; font-weight: 400; }
+.logo span { color: var(--accent); }
+.title-input {
+  font-family: var(--display); font-size: 32px; letter-spacing: .5px;
+  background: transparent; border: 1px solid transparent; color: var(--text);
+  border-radius: 8px; padding: 2px 8px; width: min(100%, 520px);
 }
-.modes button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
-button:focus-visible { outline: 3px solid var(--win); outline-offset: 2px; }
-#status {
-  font-family: var(--display); font-size: 1.35rem; text-align: center; min-height: 1.6em; margin: 0;
+.title-input:hover { border-color: var(--line); }
+.title { font-family: var(--display); font-size: 34px; font-weight: 400; letter-spacing: .5px; }
+
+/* Images / placeholders */
+.ph { display: flex; align-items: center; justify-content: center; font-weight: 700; color: rgba(255,255,255,.9); }
+.thumb { width: 30px; height: 30px; border-radius: 6px; object-fit: cover; flex: none; font-size: 12px; }
+.mini { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; flex: none; font-size: 14px; }
+.cover { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; font-size: 32px; }
+.big { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; display: block; font-size: 56px; }
+
+/* Home */
+.tlist { display: grid; gap: 12px; }
+.tcard {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px;
 }
-#status .x { color: var(--x); } #status .o { color: var(--o); }
-.board-wrap { position: relative; width: 100%; max-width: 100%; aspect-ratio: 1; }
-.board {
-  position: absolute; inset: 0; display: grid;
-  grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+.tcovers { display: flex; gap: 4px; }
+.tinfo { flex: 1; min-width: 160px; }
+.tinfo h2 { font-size: 18px; }
+.tinfo p { margin: 2px 0 0; color: var(--muted); }
+.empty-state { text-align: center; padding: 60px 16px; background: var(--panel); border: 1px dashed var(--line); border-radius: 14px; }
+.empty-state p { margin: 4px 0; }
+
+/* Setup */
+.setup { display: grid; grid-template-columns: 340px 1fr; gap: 20px; align-items: start; }
+@media (max-width: 800px) { .setup { grid-template-columns: 1fr; } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+.panel h2 { font-size: 16px; margin-bottom: 12px; }
+.preview { margin: 4px 0 14px; }
+.preview .big { max-width: 140px; font-size: 40px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.pcard { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+.pcard.editing { border-color: var(--accent); }
+.pcard .meta { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.pcard .name { font-weight: 700; overflow-wrap: anywhere; }
+.pcard .tag { font-size: 12px; color: var(--muted); }
+.startbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  margin-bottom: 14px;
 }
-.cell {
-  background: transparent; border: 0; padding: 12%; cursor: pointer; color: inherit;
-  display: grid; place-items: center; border-radius: 12px;
+.startbar label { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); }
+
+/* Bracket */
+.progress { color: var(--muted); margin: -12px 0 16px; }
+.bracket { display: flex; gap: 28px; overflow-x: auto; padding: 4px 2px 20px; }
+.round { display: flex; flex-direction: column; flex: 0 0 210px; }
+.round h3 {
+  font-family: var(--display); font-weight: 400; font-size: 20px; letter-spacing: .5px;
+  color: var(--muted); margin-bottom: 10px;
 }
-.cell:disabled { cursor: default; }
-.cell:not(:disabled):hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
-.cell svg { width: 100%; height: 100%; overflow: visible; }
-.cell path, .cell circle { fill: none; stroke-width: 9; stroke-linecap: round; }
-.mark-x path { stroke: var(--x); stroke-dasharray: 100; stroke-dashoffset: 100; animation: draw .18s ease-out forwards; }
-.mark-x path:nth-child(2) { animation-delay: .16s; }
-.mark-o circle { stroke: var(--o); stroke-dasharray: 100; stroke-dashoffset: 100; animation: draw .32s ease-out forwards; }
-.cell.dim svg { opacity: .3; transition: opacity .3s; }
-@keyframes draw { to { stroke-dashoffset: 0; } }
-svg.lines, svg.strike { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-svg.lines path { stroke: var(--ink); stroke-width: 1.4; fill: none; stroke-linecap: round; }
-svg.strike line {
-  stroke: var(--win); stroke-width: 3.2; stroke-linecap: round;
-  stroke-dasharray: 160; stroke-dashoffset: 160; animation: draw .4s ease-out forwards;
+.matches { display: flex; flex-direction: column; justify-content: space-around; gap: 14px; flex: 1; }
+.match {
+  display: block; width: 100%; padding: 0; text-align: left;
+  background: var(--panel); color: inherit; font: inherit;
+  border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
 }
-.score {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center;
-  border-top: 2px dashed var(--muted); padding-top: 14px;
+.match.playable { cursor: pointer; }
+.match.playable:hover { border-color: var(--accent); }
+.match.pending { border-color: rgba(255,176,32,.55); box-shadow: 0 0 0 1px rgba(255,176,32,.15); }
+.slot { display: flex; align-items: center; gap: 8px; padding: 6px 8px; min-height: 42px; }
+.slot + .slot { border-top: 1px solid var(--line); }
+.slot .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slot.won { background: rgba(61,220,151,.12); font-weight: 700; }
+.slot.won .nm::after { content: " ✓"; color: var(--win); }
+.slot.lost { opacity: .4; }
+.slot.empty { color: var(--muted); font-style: italic; }
+
+.champion {
+  display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  background: linear-gradient(120deg, rgba(255,176,32,.18), rgba(61,220,151,.12));
+  border: 1px solid var(--accent); border-radius: 16px; padding: 16px; margin-bottom: 20px;
 }
-.score .label { font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; }
-.score .who { font-family: var(--display); font-size: 1.1rem; }
-.score .tally { min-height: 30px; display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
-.score .num { font-variant-numeric: tabular-nums; color: var(--muted); font-size: .85rem; }
-.tally svg { width: 30px; height: 26px; }
-.tally line { stroke: var(--ink); stroke-width: 2.2; stroke-linecap: round; }
-.actions { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
-.again.ghost { border-color: var(--muted); color: var(--muted); background: transparent; }
-@media (prefers-reduced-motion: reduce) {
-  .mark-x path, .mark-o circle, svg.strike line { animation: none; stroke-dashoffset: 0; }
+.champion .big { width: 110px; font-size: 40px; }
+.champion small { color: var(--accent); font-weight: 700; letter-spacing: 2px; text-transform: uppercase; }
+.champion h2 { font-family: var(--display); font-weight: 400; font-size: 44px; line-height: 1; }
+
+/* Matchup modal */
+.modal {
+  position: fixed; inset: 0; z-index: 10;
+  background: rgba(5,6,10,.85);
+  display: flex; align-items: flex-start; justify-content: center;
+  overflow-y: auto; padding: 24px 16px;
 }
+.modal[hidden] { display: none; }
+.sheet { width: 100%; max-width: 920px; }
+.sheet-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
+.sheet-head h2 { font-family: var(--display); font-weight: 400; font-size: 28px; letter-spacing: .5px; }
+.versus { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: start; }
+@media (max-width: 640px) { .versus { grid-template-columns: 1fr; } }
+.vs { font-family: var(--display); font-size: 52px; color: var(--accent); align-self: center; text-align: center; }
+.contender {
+  background: var(--panel); border: 2px solid var(--line); border-radius: 16px; padding: 14px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.contender.won { border-color: var(--win); }
+.contender h3 { font-size: 22px; overflow-wrap: anywhere; }
+.contender .btn { width: 100%; padding: 12px; font-size: 16px; }
+.embed { width: 100%; border: 0; border-radius: 10px; display: block; }
+.embed.yt { aspect-ratio: 16 / 9; }
+.link { color: var(--accent); overflow-wrap: anywhere; }
+.sheet-foot { margin-top: 14px; display: flex; justify-content: center; }
 </style>
 </head>
 <body>
-
-<main>
-  <h1><span class="x">X</span>s &amp; <span class="o">O</span>s</h1>
-
-  <div class="modes" role="group" aria-label="Opponent">
-    <button id="mode-easy" data-mode="easy">vs Computer · Easy</button>
-    <button id="mode-hard" data-mode="hard">vs Computer · Unbeatable</button>
-    <button id="mode-pvp" data-mode="pvp">2 Players</button>
-  </div>
-
-  <p id="status" aria-live="polite"></p>
-
-  <div class="board-wrap">
-    <svg class="lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-      <path d="M33.6 3 C33 30, 34.2 65, 33.2 97"/>
-      <path d="M66.5 2.5 C67.2 35, 66 70, 66.9 97.5"/>
-      <path d="M3 33.4 C30 32.8, 70 34.2, 97 33.1"/>
-      <path d="M2.5 66.8 C35 67.4, 65 66.2, 97.5 66.6"/>
-    </svg>
-    <div class="board" id="board"></div>
-    <svg class="strike" id="strike" viewBox="0 0 100 100" aria-hidden="true"></svg>
-  </div>
-
-  <section class="score" aria-label="Score">
-    <div><div class="label">Player</div><div class="who" style="color:var(--x)">X</div><div class="tally" id="t-x"></div><div class="num" id="n-x"></div></div>
-    <div><div class="label">Draws</div><div class="who">—</div><div class="tally" id="t-d"></div><div class="num" id="n-d"></div></div>
-    <div><div class="label" id="o-label">Computer</div><div class="who" style="color:var(--o)">O</div><div class="tally" id="t-o"></div><div class="num" id="n-o"></div></div>
-  </section>
-
-  <div class="actions">
-    <button class="again" id="again">New round</button>
-    <button class="again ghost" id="reset">Clear score</button>
-  </div>
-</main>
+<main id="app"></main>
+<div class="modal" id="modal" hidden></div>
 
 <script>
-const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-const X_SVG = '<svg viewBox="0 0 100 100" class="mark-x"><path pathLength="100" d="M18 16 C40 40, 60 60, 84 85"/><path pathLength="100" d="M83 15 C60 40, 40 62, 17 84"/></svg>';
-const O_SVG = '<svg viewBox="0 0 100 100" class="mark-o"><circle pathLength="100" cx="50" cy="50" r="34" transform="rotate(-80 50 50)"/></svg>';
+const KEY = 'brackets.v1';
+const $app = document.getElementById('app');
+const $modal = document.getElementById('modal');
 
-let S;
-const boardEl = document.getElementById('board');
-const cells = [];
-for (let i = 0; i < 9; i++) {
-  const b = document.createElement('button');
-  b.className = 'cell'; b.id = 'cell-' + i;
-  b.addEventListener('click', () => play(i));
-  boardEl.appendChild(b); cells.push(b);
+// ---------- Storage ----------
+function load() {
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY));
+    if (s && Array.isArray(s.tournaments)) return s;
+  } catch (e) {}
+  return { tournaments: [] };
 }
+let state = load();
 
-function winner(b) {
-  for (const l of LINES) if (b[l[0]] && b[l[0]] === b[l[1]] && b[l[0]] === b[l[2]]) return { p: b[l[0]], line: l };
-  return b.every(Boolean) ? { p: 'draw' } : null;
-}
-
-function minimax(b, turn) {
-  const w = winner(b);
-  if (w) return { score: w.p === 'O' ? 10 : w.p === 'X' ? -10 : 0 };
-  let best = { score: turn === 'O' ? -Infinity : Infinity };
-  for (let i = 0; i < 9; i++) if (!b[i]) {
-    b[i] = turn;
-    const r = minimax(b, turn === 'O' ? 'X' : 'O');
-    b[i] = null;
-    const s = r.score - Math.sign(r.score) * 0.1; // prefer faster wins, slower losses
-    if (turn === 'O' ? s > best.score : s < best.score) best = { score: s, move: i };
+function save() {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(state));
+    return true;
+  } catch (e) {
+    alert('Could not save: browser storage is probably full.\nTry using image URLs instead of uploaded images, or delete old tournaments.');
+    return false;
   }
-  return best;
 }
 
-function computerMove() {
-  const empty = S.board.map((v, i) => v ? null : i).filter(v => v !== null);
-  if (S.mode === 'easy') {
-    // Easy: takes an immediate win half the time, otherwise random
-    if (Math.random() < 0.5) {
-      for (const i of empty) { const t = S.board.slice(); t[i] = 'O'; if (winner(t)?.p === 'O') return i; }
+// ---------- View state ----------
+let view = { screen: 'home', tid: null, match: null };
+let editingId = null;   // participant being edited in setup
+let formImage = null;   // uploaded (resized) image data URL waiting in the form
+
+const cur = () => state.tournaments.find(t => t.id === view.tid);
+const person = (t, id) => t.participants.find(p => p.id === id);
+
+// ---------- Helpers ----------
+const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function safeUrl(v, allowData) {
+  v = (v || '').trim();
+  if (!v) return '';
+  if (allowData && /^data:image\//i.test(v)) return v;
+  if (/^https?:\/\//i.test(v)) return v;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(v)) return '';   // block javascript: and other schemes
+  return 'https://' + v;
+}
+
+function initials(name) {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('') || '?';
+}
+function hue(name) {
+  let h = 0;
+  for (const c of name) h = (h * 31 + c.charCodeAt(0)) % 360;
+  return h;
+}
+function placeholder(name, cls) {
+  return `<div class="${cls} ph" style="background:hsl(${hue(name)} 45% 32%)">${esc(initials(name))}</div>`;
+}
+function imgTag(p, cls) {
+  if (!p.image) return placeholder(p.name, cls);
+  return `<img class="${cls}" src="${esc(p.image)}" alt="" data-name="${esc(p.name)}">`;
+}
+// Broken image URLs fall back to the coloured initials block
+document.addEventListener('error', e => {
+  const img = e.target;
+  if (img.tagName === 'IMG' && img.dataset.name !== undefined) {
+    img.outerHTML = placeholder(img.dataset.name, img.className);
+  }
+}, true);
+
+function embedFor(link) {
+  let u;
+  try { u = new URL(link); } catch (e) { return null; }
+  const host = u.hostname.replace(/^(www|m|music)\./, '');
+  let yt = null;
+  if (host === 'youtube.com') {
+    yt = u.searchParams.get('v') || (u.pathname.match(/^\/(?:shorts|embed|live)\/([\w-]+)/) || [])[1];
+  } else if (host === 'youtu.be') {
+    yt = u.pathname.slice(1).split('/')[0];
+  }
+  if (yt) {
+    return `<iframe class="embed yt" src="https://www.youtube.com/embed/${encodeURIComponent(yt)}" title="YouTube player"
+      allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+  }
+  if (host === 'open.spotify.com') {
+    const m = u.pathname.match(/\/(track|album|playlist|episode|show|artist)\/([A-Za-z0-9]+)/);
+    if (m) {
+      const h = (m[1] === 'track' || m[1] === 'episode') ? 152 : 352;
+      return `<iframe class="embed" style="height:${h}px" src="https://open.spotify.com/embed/${m[1]}/${m[2]}" title="Spotify player"
+        allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"></iframe>`;
     }
-    return empty[Math.floor(Math.random() * empty.length)];
   }
-  return minimax(S.board.slice(), 'O').move;
+  return null;
+}
+function linkKind(link) {
+  if (!link) return '';
+  const e = embedFor(link);
+  if (e) return e.includes('youtube') ? '▶ YouTube' : '♫ Spotify';
+  return '🔗 Link';
 }
 
-function play(i) {
-  if (S.board[i] || S.over || S.thinking) return;
-  S.board[i] = S.turn;
-  S.last = i;
-  const w = winner(S.board);
-  if (w) finish(w);
-  else S.turn = S.turn === 'X' ? 'O' : 'X';
-  render();
-  if (!S.over && S.mode !== 'pvp' && S.turn === 'O') {
-    S.thinking = true; render();
-    setTimeout(() => { S.thinking = false; play(computerMove()); }, 450);
-  }
-}
-
-function finish(w) {
-  S.over = true; S.result = w;
-  if (w.p === 'draw') S.score.d++; else S.score[w.p.toLowerCase()]++;
-}
-
-function newRound() {
-  S.round++;
-  S.board = Array(9).fill(null);
-  S.over = false; S.result = null; S.thinking = false; S.last = null;
-  // alternate who starts each round
-  S.turn = S.round % 2 === 0 ? 'X' : 'O';
-  render();
-  if (S.mode !== 'pvp' && S.turn === 'O') {
-    S.thinking = true; render();
-    setTimeout(() => { S.thinking = false; play(computerMove()); }, 500);
-  }
-}
-
-function tally(n) {
-  let html = '';
-  for (let g = 0; g < Math.ceil(n / 5); g++) {
-    const k = Math.min(5, n - g * 5);
-    let lines = '';
-    for (let j = 0; j < Math.min(k, 4); j++) lines += `<line x1="${5 + j * 6}" y1="3" x2="${4 + j * 6}" y2="23"/>`;
-    if (k === 5) lines += '<line x1="1" y1="19" x2="27" y2="6"/>';
-    html += `<svg viewBox="0 0 30 26">${lines}</svg>`;
-  }
-  return html;
-}
-
-const centers = i => [16.7 + (i % 3) * 33.3, 16.7 + Math.floor(i / 3) * 33.3];
-
-let drawn = [];
-function render() {
-  S.board.forEach((v, i) => {
-    const c = cells[i];
-    if (drawn[i] !== v) { c.innerHTML = v === 'X' ? X_SVG : v === 'O' ? O_SVG : ''; drawn[i] = v; }
-    c.disabled = !!v || S.over || S.thinking || (S.mode !== 'pvp' && S.turn === 'O');
-    c.classList.toggle('dim', !!(S.over && S.result.line && !S.result.line.includes(i)));
-    c.setAttribute('aria-label', `Row ${Math.floor(i / 3) + 1}, column ${i % 3 + 1}: ${v || 'empty'}`);
+function resizeImage(file, max = 320) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Not an image')); };
+    img.onload = () => {
+      const s = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(img.width * s));
+      c.height = Math.max(1, Math.round(img.height * s));
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL('image/jpeg', 0.82));
+    };
+    img.src = url;
   });
-  const strike = document.getElementById('strike');
-  if (S.over && S.result.line) {
-    const [a, , c] = S.result.line, [x1, y1] = centers(a), [x2, y2] = centers(c);
-    const dx = (x2 - x1) * 0.18, dy = (y2 - y1) * 0.18;
-    const html = `<line pathLength="160" x1="${x1 - dx}" y1="${y1 - dy}" x2="${x2 + dx}" y2="${y2 + dy}"/>`;
-    if (strike.dataset.k !== html) { strike.innerHTML = html; strike.dataset.k = html; }
-  } else { strike.innerHTML = ''; strike.dataset.k = ''; }
+}
 
-  const name = p => S.mode === 'pvp' ? `Player <span class="${p.toLowerCase()}">${p}</span>` : p === 'X' ? 'You' : 'Computer';
-  const st = document.getElementById('status');
-  if (S.over) {
-    st.innerHTML = S.result.p === 'draw' ? "Cat's game. It's a draw."
-      : S.mode === 'pvp' ? `${name(S.result.p)} wins!`
-      : S.result.p === 'X' ? 'You win!' : 'Computer wins.';
-  } else if (S.thinking) st.textContent = 'Computer is thinking…';
-  else st.innerHTML = S.mode === 'pvp' ? `${name(S.turn)} to move` : `Your move as <span class="x">X</span>`;
-
-  for (const k of ['x', 'd', 'o']) {
-    document.getElementById('t-' + k).innerHTML = tally(S.score[k]);
-    document.getElementById('n-' + k).textContent = S.score[k];
+// ---------- Bracket logic ----------
+function buildRounds(t, shuffle) {
+  const ids = t.participants.map(p => p.id);
+  if (shuffle) {
+    for (let i = ids.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [ids[i], ids[j]] = [ids[j], ids[i]];
+    }
   }
-  document.getElementById('o-label').textContent = S.mode === 'pvp' ? 'Player' : 'Computer';
-  document.querySelectorAll('.modes button').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === S.mode));
-  document.getElementById('again').textContent = S.over ? 'Play again' : 'New round';
+  let size = 2;
+  while (size < ids.length) size *= 2;
+  const firstCount = size / 2;
+  const byes = size - ids.length;
+  // Spread byes evenly so no first-round match has two of them
+  const byeAt = new Set();
+  for (let j = 0; j < byes; j++) byeAt.add(Math.floor(j * firstCount / byes));
+
+  const first = [];
+  let k = 0;
+  for (let i = 0; i < firstCount; i++) {
+    if (byeAt.has(i)) first.push({ a: ids[k++], b: null, winner: null });
+    else first.push({ a: ids[k++], b: ids[k++], winner: null });
+  }
+  t.rounds = [first];
+  for (let n = firstCount / 2; n >= 1; n /= 2) {
+    t.rounds.push(Array.from({ length: n }, () => ({ a: null, b: null, winner: null })));
+  }
+  first.forEach((m, i) => { if (m.b === null) advance(t, 0, i, m.a); });
 }
 
-document.querySelectorAll('.modes button').forEach(b => b.addEventListener('click', () => {
-  if (S.mode === b.dataset.mode) return;
-  S.mode = b.dataset.mode; S.score = { x: 0, o: 0, d: 0 }; S.round = -1; newRound();
-}));
-document.getElementById('again').addEventListener('click', newRound);
-document.getElementById('reset').addEventListener('click', () => { S.score = { x: 0, o: 0, d: 0 }; render(); });
+// Put `val` into the next-round slot fed by match (r, i). If that changes a
+// match that already had a result, clear it and keep clearing down the line.
+function feedNext(t, r, i, val) {
+  if (r + 1 >= t.rounds.length) return;
+  const next = t.rounds[r + 1][i >> 1];
+  const slot = i % 2 ? 'b' : 'a';
+  if (next[slot] === val) return;
+  next[slot] = val;
+  if (next.winner !== null) {
+    next.winner = null;
+    feedNext(t, r + 1, i >> 1, null);
+  }
+}
+function advance(t, r, i, pid) {
+  const m = t.rounds[r][i];
+  if (m.winner === pid) return;
+  m.winner = pid;
+  feedNext(t, r, i, pid);
+}
+function undo(t, r, i) {
+  t.rounds[r][i].winner = null;
+  feedNext(t, r, i, null);
+}
 
-function start(saved) {
-  S = saved && saved.board ? saved : {
-    mode: 'hard', board: Array(9).fill(null), turn: 'X', over: false, result: null,
-    thinking: false, score: { x: 0, o: 0, d: 0 }, round: 0, last: null
-  };
-  S.thinking = false;
+const champion = t => t.rounds ? t.rounds[t.rounds.length - 1][0].winner : null;
+function roundName(t, r) {
+  const fromEnd = t.rounds.length - 1 - r;
+  if (fromEnd === 0) return 'Final';
+  if (fromEnd === 1) return 'Semifinals';
+  if (fromEnd === 2) return 'Quarterfinals';
+  return 'Round of ' + t.rounds[r].length * 2;
+}
+function counts(t) {
+  let done = 0, total = 0;
+  t.rounds.forEach((round, r) => round.forEach(m => {
+    if (r === 0 && m.b === null) return;  // byes aren't real matches
+    total++;
+    if (m.winner !== null) done++;
+  }));
+  return { done, total };
+}
+function statusLabel(t) {
+  if (!t.rounds) return 'Setting up';
+  const c = champion(t);
+  if (c) return 'Winner: ' + esc(person(t, c).name);
+  const { done, total } = counts(t);
+  return `In progress · ${done}/${total} matches`;
+}
+
+// ---------- Rendering ----------
+function go(screen, tid = view.tid) {
+  view = { screen, tid, match: null };
+  editingId = null;
+  formImage = null;
   render();
-  if (!S.over && S.mode !== 'pvp' && S.turn === 'O') play(computerMove());
+  window.scrollTo(0, 0);
 }
-window.claude?.hot?.snapshot?.(() => S);
-window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+
+function render() {
+  const t = cur();
+  if (view.screen === 'home' || !t) { view.screen = 'home'; renderHome(); }
+  else if (view.screen === 'setup') renderSetup(t);
+  else renderBracket(t);
+  renderModal();
+}
+
+function renderHome() {
+  const list = [...state.tournaments].sort((a, b) => b.createdAt - a.createdAt);
+  $app.innerHTML = `
+    <header class="top">
+      <h1 class="logo">Bracket <span>Maker</span></h1>
+      <button class="btn primary" data-action="new">+ New tournament</button>
+    </header>
+    ${list.length ? `<div class="tlist">${list.map(t => `
+      <div class="tcard">
+        <div class="tcovers">${t.participants.slice(0, 4).map(p => imgTag(p, 'mini')).join('')}</div>
+        <div class="tinfo">
+          <h2>${esc(t.name)}</h2>
+          <p>${t.participants.length} participant${t.participants.length === 1 ? '' : 's'} · ${statusLabel(t)}</p>
+        </div>
+        <div class="row">
+          <button class="btn primary" data-action="open" data-id="${t.id}">Open</button>
+          <button class="btn ghost danger" data-action="delete" data-id="${t.id}">Delete</button>
+        </div>
+      </div>`).join('')}</div>`
+    : `<div class="empty-state">
+        <p><strong>No tournaments yet.</strong></p>
+        <p class="muted">Add movies, songs, anything, then pick winners until only one is left.</p>
+      </div>`}`;
+}
+
+function renderSetup(t) {
+  const editing = editingId ? person(t, editingId) : null;
+  const imageUrl = editing && editing.image && !editing.image.startsWith('data:') ? editing.image : '';
+  $app.innerHTML = `
+    <header class="top">
+      <div class="row">
+        <button class="btn ghost" data-action="home">← All</button>
+        <input class="title-input" id="title" value="${esc(t.name)}" maxlength="80" aria-label="Tournament name">
+      </div>
+    </header>
+    <div class="setup">
+      <form class="panel" id="pform" autocomplete="off">
+        <h2>${editing ? 'Edit participant' : 'Add participant'}</h2>
+        <label class="field">Name
+          <input type="text" name="pname" required maxlength="80" value="${editing ? esc(editing.name) : ''}">
+        </label>
+        <label class="field">Image URL
+          <input type="url" name="pimage" placeholder="https://… (or upload below)" value="${esc(imageUrl)}">
+        </label>
+        <div class="row" style="margin-bottom:6px">
+          <label class="btn small">Upload image<input type="file" accept="image/*" id="file" hidden></label>
+          <button type="button" class="btn small ghost" data-action="clear-image">Clear image</button>
+        </div>
+        <div class="preview" id="preview"></div>
+        <label class="field">Link: YouTube, Spotify or any URL (optional)
+          <input type="url" name="plink" placeholder="https://youtube.com/watch?v=…" value="${editing ? esc(editing.link) : ''}">
+        </label>
+        <div class="row">
+          <button class="btn primary">${editing ? 'Save' : 'Add'}</button>
+          ${editing ? '<button type="button" class="btn ghost" data-action="cancel-edit">Cancel</button>' : ''}
+        </div>
+      </form>
+      <section>
+        <div class="startbar">
+          <span class="muted">${t.participants.length} participant${t.participants.length === 1 ? '' : 's'}</span>
+          <div class="row">
+            <label><input type="checkbox" id="shuffle" checked> Shuffle seeding</label>
+            <button class="btn primary" data-action="start" ${t.participants.length < 2 ? 'disabled' : ''}>Start tournament →</button>
+          </div>
+        </div>
+        ${t.participants.length ? `<div class="grid">${t.participants.map(p => `
+          <div class="pcard ${p.id === editingId ? 'editing' : ''}">
+            ${imgTag(p, 'cover')}
+            <div class="meta">
+              <span class="name">${esc(p.name)}</span>
+              ${p.link ? `<span class="tag">${linkKind(p.link)}</span>` : ''}
+              <div class="row" style="margin-top:auto">
+                <button class="btn small" data-action="edit-p" data-id="${p.id}">Edit</button>
+                <button class="btn small ghost danger" data-action="remove-p" data-id="${p.id}">Remove</button>
+              </div>
+            </div>
+          </div>`).join('')}</div>`
+        : `<div class="empty-state"><p class="muted">Add at least 2 participants to start.</p></div>`}
+      </section>
+    </div>`;
+
+  if (editing && editing.image && editing.image.startsWith('data:') && formImage === null) formImage = editing.image;
+  updatePreview();
+}
+
+function updatePreview() {
+  const el = document.getElementById('preview');
+  const form = document.getElementById('pform');
+  if (!el || !form) return;
+  const src = formImage || safeUrl(form.elements.pimage.value, false);
+  const name = form.elements.pname.value || '?';
+  el.innerHTML = src ? imgTag({ name, image: src }, 'big') : '';
+}
+
+function slotHtml(t, pid, m, emptyLabel) {
+  if (pid === null) return `<div class="slot empty">${emptyLabel}</div>`;
+  const p = person(t, pid);
+  const cls = m.winner === null ? '' : (m.winner === pid ? 'won' : 'lost');
+  return `<div class="slot ${cls}">${imgTag(p, 'thumb')}<span class="nm">${esc(p.name)}</span></div>`;
+}
+
+function renderBracket(t) {
+  const champ = champion(t);
+  const { done, total } = counts(t);
+  $app.innerHTML = `
+    <header class="top">
+      <div class="row">
+        <button class="btn ghost" data-action="home">← All</button>
+        <h1 class="title">${esc(t.name)}</h1>
+      </div>
+      <button class="btn ghost danger" data-action="reset">Reset bracket</button>
+    </header>
+    <p class="progress">${done} of ${total} matches decided. Click a highlighted match to pick a winner.</p>
+    ${champ ? (p => `
+      <div class="champion">
+        ${imgTag(p, 'big')}
+        <div><small>🏆 Champion</small><h2>${esc(p.name)}</h2></div>
+      </div>`)(person(t, champ)) : ''}
+    <div class="bracket">
+      ${t.rounds.map((round, r) => `
+        <div class="round">
+          <h3>${roundName(t, r)}</h3>
+          <div class="matches">
+            ${round.map((m, i) => {
+              const playable = m.a !== null && m.b !== null;
+              const pending = playable && m.winner === null;
+              return `<button class="match ${playable ? 'playable' : ''} ${pending ? 'pending' : ''}"
+                        data-action="open-match" data-r="${r}" data-i="${i}" ${playable ? '' : 'disabled'}>
+                ${slotHtml(t, m.a, m, 'TBD')}
+                ${slotHtml(t, m.b, m, r === 0 ? 'Bye' : 'TBD')}
+              </button>`;
+            }).join('')}
+          </div>
+        </div>`).join('')}
+    </div>`;
+}
+
+function contenderHtml(t, pid, m) {
+  const p = person(t, pid);
+  const embed = p.link ? embedFor(p.link) : null;
+  const won = m.winner === pid;
+  return `
+    <div class="contender ${won ? 'won' : ''}">
+      ${imgTag(p, 'big')}
+      <h3>${esc(p.name)}</h3>
+      ${embed || (p.link ? `<a class="link" href="${esc(p.link)}" target="_blank" rel="noopener noreferrer">Open link ↗</a>` : '')}
+      <button class="btn ${won ? '' : 'primary'}" data-action="pick" data-pid="${pid}" ${won ? 'disabled' : ''}>
+        ${won ? 'Winner ✓' : 'Pick ' + esc(p.name)}
+      </button>
+    </div>`;
+}
+
+function renderModal() {
+  const t = cur();
+  if (!view.match || !t || !t.rounds) {
+    $modal.hidden = true;
+    $modal.innerHTML = '';
+    return;
+  }
+  const { r, i } = view.match;
+  const m = t.rounds[r][i];
+  $modal.innerHTML = `
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-head">
+        <h2>${roundName(t, r)}${t.rounds[r].length > 1 ? ` · Match ${i + 1}` : ''}</h2>
+        <button class="btn ghost" data-action="close">Close ✕</button>
+      </div>
+      <div class="versus">
+        ${contenderHtml(t, m.a, m)}
+        <div class="vs">VS</div>
+        ${contenderHtml(t, m.b, m)}
+      </div>
+      ${m.winner !== null ? '<div class="sheet-foot"><button class="btn ghost" data-action="undo">Undo pick</button></div>' : ''}
+    </div>`;
+  $modal.hidden = false;
+}
+
+function closeModal() {
+  view.match = null;
+  renderModal();
+}
+
+// ---------- Events ----------
+document.addEventListener('click', e => {
+  if (e.target === $modal) return closeModal();
+  const el = e.target.closest('[data-action]');
+  if (!el || el.disabled) return;
+  const t = cur();
+  switch (el.dataset.action) {
+    case 'new': {
+      const nt = { id: uid(), name: 'Untitled tournament', createdAt: Date.now(), participants: [], rounds: null };
+      state.tournaments.push(nt);
+      save();
+      go('setup', nt.id);
+      document.getElementById('title').select();
+      break;
+    }
+    case 'open': {
+      const ot = state.tournaments.find(x => x.id === el.dataset.id);
+      go(ot.rounds ? 'bracket' : 'setup', ot.id);
+      break;
+    }
+    case 'delete': {
+      const dt = state.tournaments.find(x => x.id === el.dataset.id);
+      if (confirm(`Delete "${dt.name}"? This can't be undone.`)) {
+        state.tournaments = state.tournaments.filter(x => x !== dt);
+        save();
+        render();
+      }
+      break;
+    }
+    case 'home': go('home', null); break;
+    case 'edit-p':
+      editingId = el.dataset.id;
+      formImage = null;
+      render();
+      document.querySelector('[name=pname]').focus();
+      break;
+    case 'cancel-edit':
+      editingId = null;
+      formImage = null;
+      render();
+      break;
+    case 'remove-p':
+      t.participants = t.participants.filter(p => p.id !== el.dataset.id);
+      if (editingId === el.dataset.id) { editingId = null; formImage = null; }
+      save();
+      render();
+      break;
+    case 'clear-image':
+      formImage = null;
+      document.querySelector('[name=pimage]').value = '';
+      document.getElementById('file').value = '';
+      updatePreview();
+      break;
+    case 'start':
+      buildRounds(t, document.getElementById('shuffle').checked);
+      save();
+      go('bracket');
+      break;
+    case 'reset':
+      if (confirm('Reset the bracket? All picks will be lost, but the participants are kept.')) {
+        t.rounds = null;
+        save();
+        go('setup');
+      }
+      break;
+    case 'open-match':
+      view.match = { r: +el.dataset.r, i: +el.dataset.i };
+      renderModal();
+      break;
+    case 'pick':
+      advance(t, view.match.r, view.match.i, el.dataset.pid);
+      save();
+      view.match = null;
+      render();
+      break;
+    case 'undo':
+      undo(t, view.match.r, view.match.i);
+      save();
+      view.match = null;
+      render();
+      break;
+    case 'close': closeModal(); break;
+  }
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && view.match) closeModal();
+});
+
+document.addEventListener('change', async e => {
+  if (e.target.id === 'title') {
+    const t = cur();
+    t.name = e.target.value.trim() || 'Untitled tournament';
+    save();
+  }
+  if (e.target.id === 'file' && e.target.files[0]) {
+    try {
+      formImage = await resizeImage(e.target.files[0]);
+      document.querySelector('[name=pimage]').value = '';
+      updatePreview();
+    } catch (err) {
+      alert("That file couldn't be read as an image.");
+    }
+  }
+});
+
+document.addEventListener('input', e => {
+  if (e.target.name === 'pimage') {
+    formImage = null;
+    updatePreview();
+  }
+});
+
+document.addEventListener('submit', e => {
+  if (e.target.id !== 'pform') return;
+  e.preventDefault();
+  const t = cur();
+  const f = e.target.elements;
+  const name = f.pname.value.trim();
+  if (!name) return;
+  const data = { name, image: formImage || safeUrl(f.pimage.value, false), link: safeUrl(f.plink.value, false) };
+  if (editingId) {
+    const p = person(t, editingId);
+    const old = { ...p };
+    Object.assign(p, data);
+    if (!save()) { Object.assign(p, old); return; }
+  } else {
+    t.participants.push({ id: uid(), ...data });
+    if (!save()) { t.participants.pop(); return; }
+  }
+  editingId = null;
+  formImage = null;
+  render();
+  document.querySelector('[name=pname]').focus();
+});
+
+render();
 </script>
 </body>
 </html>
