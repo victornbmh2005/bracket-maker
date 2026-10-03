@@ -1,0 +1,21 @@
+{
+  "name": "bracket-maker-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "REST API for Bracket Maker (Node + Express + PostgreSQL)",
+  "type": "module",
+  "engines": {
+    "node": ">=20.6"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --env-file=.env --watch src/server.js",
+    "migrate": "node --env-file=.env scripts/migrate.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "pg": "^8.23.1",
+    "swagger-ui-express": "^5.0.1"
+  }
+}

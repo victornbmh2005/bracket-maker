@@ -1,210 +1,47 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bracket Maker</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600;700&display=swap">
-<style>
-:root {
-  --bg: #0f1117;
-  --panel: #181b24;
-  --panel2: #20242f;
-  --line: #2c3140;
-  --text: #e9ecf3;
-  --muted: #8a92a6;
-  --accent: #ffb020;
-  --win: #3ddc97;
-  --danger: #ff5d5d;
-  --display: "Bebas Neue", Impact, sans-serif;
-}
-* { box-sizing: border-box; }
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font: 15px/1.45 Inter, system-ui, sans-serif;
-}
-#app { max-width: 1200px; margin: 0 auto; padding: 20px 16px 60px; }
-h1, h2, h3 { margin: 0; }
-.muted { color: var(--muted); }
-.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-
-/* Buttons & inputs */
-.btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  background: var(--panel2); color: var(--text);
-  border: 1px solid var(--line); border-radius: 8px;
-  padding: 8px 14px; font: inherit; font-weight: 600; cursor: pointer;
-}
-.btn:hover { border-color: var(--muted); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: #1a1200; }
-.btn.primary:hover { filter: brightness(1.08); }
-.btn.ghost { background: transparent; }
-.btn.danger { color: var(--danger); }
-.btn.small { padding: 4px 10px; font-size: 13px; }
-.btn:disabled { opacity: .4; cursor: not-allowed; }
-label.field { display: block; margin-bottom: 12px; font-weight: 600; font-size: 13px; color: var(--muted); }
-input[type=text], input[type=url] {
-  display: block; width: 100%; margin-top: 4px;
-  background: var(--bg); color: var(--text);
-  border: 1px solid var(--line); border-radius: 8px;
-  padding: 9px 11px; font: inherit;
-}
-input:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
-
-/* Header */
-.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
-.logo { font-family: var(--display); font-size: 40px; letter-spacing: 1px; font-weight: 400; }
-.logo span { color: var(--accent); }
-.title-input {
-  font-family: var(--display); font-size: 32px; letter-spacing: .5px;
-  background: transparent; border: 1px solid transparent; color: var(--text);
-  border-radius: 8px; padding: 2px 8px; width: min(100%, 520px);
-}
-.title-input:hover { border-color: var(--line); }
-.title { font-family: var(--display); font-size: 34px; font-weight: 400; letter-spacing: .5px; }
-
-/* Images / placeholders */
-.ph { display: flex; align-items: center; justify-content: center; font-weight: 700; color: rgba(255,255,255,.9); }
-.thumb { width: 30px; height: 30px; border-radius: 6px; object-fit: cover; flex: none; font-size: 12px; }
-.mini { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; flex: none; font-size: 14px; }
-.cover { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; font-size: 32px; }
-.big { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; display: block; font-size: 56px; }
-
-/* Home */
-.tlist { display: grid; gap: 12px; }
-.tcard {
-  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px;
-}
-.tcovers { display: flex; gap: 4px; }
-.tinfo { flex: 1; min-width: 160px; }
-.tinfo h2 { font-size: 18px; }
-.tinfo p { margin: 2px 0 0; color: var(--muted); }
-.empty-state { text-align: center; padding: 60px 16px; background: var(--panel); border: 1px dashed var(--line); border-radius: 14px; }
-.empty-state p { margin: 4px 0; }
-
-/* Setup */
-.setup { display: grid; grid-template-columns: 340px 1fr; gap: 20px; align-items: start; }
-@media (max-width: 800px) { .setup { grid-template-columns: 1fr; } }
-.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
-.panel h2 { font-size: 16px; margin-bottom: 12px; }
-.preview { margin: 4px 0 14px; }
-.preview .big { max-width: 140px; font-size: 40px; }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
-.pcard { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
-.pcard.editing { border-color: var(--accent); }
-.pcard .meta { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
-.pcard .name { font-weight: 700; overflow-wrap: anywhere; }
-.pcard .tag { font-size: 12px; color: var(--muted); }
-.startbar {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-  margin-bottom: 14px;
-}
-.startbar label { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); }
-
-/* Bracket */
-.progress { color: var(--muted); margin: -12px 0 16px; }
-.bracket { display: flex; gap: 28px; overflow-x: auto; padding: 4px 2px 20px; }
-.round { display: flex; flex-direction: column; flex: 0 0 210px; }
-.round h3 {
-  font-family: var(--display); font-weight: 400; font-size: 20px; letter-spacing: .5px;
-  color: var(--muted); margin-bottom: 10px;
-}
-.matches { display: flex; flex-direction: column; justify-content: space-around; gap: 14px; flex: 1; }
-.match {
-  display: block; width: 100%; padding: 0; text-align: left;
-  background: var(--panel); color: inherit; font: inherit;
-  border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
-}
-.match.playable { cursor: pointer; }
-.match.playable:hover { border-color: var(--accent); }
-.match.pending { border-color: rgba(255,176,32,.55); box-shadow: 0 0 0 1px rgba(255,176,32,.15); }
-.slot { display: flex; align-items: center; gap: 8px; padding: 6px 8px; min-height: 42px; }
-.slot + .slot { border-top: 1px solid var(--line); }
-.slot .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.slot.won { background: rgba(61,220,151,.12); font-weight: 700; }
-.slot.won .nm::after { content: " ✓"; color: var(--win); }
-.slot.lost { opacity: .4; }
-.slot.empty { color: var(--muted); font-style: italic; }
-
-.champion {
-  display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
-  background: linear-gradient(120deg, rgba(255,176,32,.18), rgba(61,220,151,.12));
-  border: 1px solid var(--accent); border-radius: 16px; padding: 16px; margin-bottom: 20px;
-}
-.champion .big { width: 110px; font-size: 40px; }
-.champion small { color: var(--accent); font-weight: 700; letter-spacing: 2px; text-transform: uppercase; }
-.champion h2 { font-family: var(--display); font-weight: 400; font-size: 44px; line-height: 1; }
-
-/* Matchup modal */
-.modal {
-  position: fixed; inset: 0; z-index: 10;
-  background: rgba(5,6,10,.85);
-  display: flex; align-items: flex-start; justify-content: center;
-  overflow-y: auto; padding: 24px 16px;
-}
-.modal[hidden] { display: none; }
-.sheet { width: 100%; max-width: 920px; }
-.sheet-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
-.sheet-head h2 { font-family: var(--display); font-weight: 400; font-size: 28px; letter-spacing: .5px; }
-.versus { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: start; }
-@media (max-width: 640px) { .versus { grid-template-columns: 1fr; } }
-.vs { font-family: var(--display); font-size: 52px; color: var(--accent); align-self: center; text-align: center; }
-.contender {
-  background: var(--panel); border: 2px solid var(--line); border-radius: 16px; padding: 14px;
-  display: flex; flex-direction: column; gap: 12px;
-}
-.contender.won { border-color: var(--win); }
-.contender h3 { font-size: 22px; overflow-wrap: anywhere; }
-.contender .btn { width: 100%; padding: 12px; font-size: 16px; }
-.embed { width: 100%; border: 0; border-radius: 10px; display: block; }
-.embed.yt { aspect-ratio: 16 / 9; }
-.link { color: var(--accent); overflow-wrap: anywhere; }
-.sheet-foot { margin-top: 14px; display: flex; justify-content: center; }
-</style>
-</head>
-<body>
-<main id="app"></main>
-<div class="modal" id="modal" hidden></div>
-
-<script>
-const KEY = 'brackets.v1';
+const MINE_KEY = 'brackets.mine';   // ids of tournaments this browser has opened
+const OLD_KEY = 'brackets.v1';      // data from the old browser-only version
 const $app = document.getElementById('app');
 const $modal = document.getElementById('modal');
+const $toast = document.getElementById('toast');
 
-// ---------- Storage ----------
-function load() {
-  try {
-    const s = JSON.parse(localStorage.getItem(KEY));
-    if (s && Array.isArray(s.tournaments)) return s;
-  } catch (e) {}
-  return { tournaments: [] };
-}
-let state = load();
+// ---------- State ----------
+let view = { screen: 'loading', match: null };   // screen: loading | home | tournament | error
+let current = null;     // the open tournament: {id, name, rounds, participants: [...]}
+let summaries = [];     // home page list
+let errorMessage = '';
+let editingId = null;   // participant being edited in setup
+let formImage = null;   // uploaded (resized) image data URL waiting in the form
+let selectTitle = false;
+let busy = false;
+let server = { status: 'checking', detail: '' };   // from GET /api/health
 
-function save() {
+const person = (t, id) => t.participants.find(p => p.id === id);
+
+// ---------- "My tournaments" (this browser only) ----------
+function getMine() {
   try {
-    localStorage.setItem(KEY, JSON.stringify(state));
-    return true;
+    const ids = JSON.parse(localStorage.getItem(MINE_KEY));
+    return Array.isArray(ids) ? ids : [];
   } catch (e) {
-    alert('Could not save: browser storage is probably full.\nTry using image URLs instead of uploaded images, or delete old tournaments.');
-    return false;
+    return [];
+  }
+}
+function setMine(ids) {
+  try { localStorage.setItem(MINE_KEY, JSON.stringify(ids)); } catch (e) {}
+}
+const addMine = id => setMine([id, ...getMine().filter(x => x !== id)]);
+const removeMine = id => setMine(getMine().filter(x => x !== id));
+
+function getOldTournaments() {
+  try {
+    const s = JSON.parse(localStorage.getItem(OLD_KEY));
+    return s && Array.isArray(s.tournaments) ? s.tournaments : [];
+  } catch (e) {
+    return [];
   }
 }
 
-// ---------- View state ----------
-let view = { screen: 'home', tid: null, match: null };
-let editingId = null;   // participant being edited in setup
-let formImage = null;   // uploaded (resized) image data URL waiting in the form
-
-const cur = () => state.tournaments.find(t => t.id === view.tid);
-const person = (t, id) => t.participants.find(p => p.id === id);
-
 // ---------- Helpers ----------
-const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function safeUrl(v, allowData) {
@@ -291,7 +128,18 @@ function resizeImage(file, max = 320) {
   });
 }
 
+let toastTimer;
+function toast(message, isError = false) {
+  $toast.textContent = message;
+  $toast.classList.toggle('error', isError);
+  $toast.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { $toast.hidden = true; }, 4000);
+}
+
 // ---------- Bracket logic ----------
+// These work on any object with {participants, rounds}. The app runs them on
+// a copy, sends the new rounds to the server, and keeps what the server returns.
 function buildRounds(t, shuffle) {
   const ids = t.participants.map(p => p.id);
   if (shuffle) {
@@ -362,48 +210,155 @@ function counts(t) {
   }));
   return { done, total };
 }
-function statusLabel(t) {
-  if (!t.rounds) return 'Setting up';
-  const c = champion(t);
-  if (c) return 'Winner: ' + esc(person(t, c).name);
-  const { done, total } = counts(t);
-  return `In progress · ${done}/${total} matches`;
+function summaryStatus(s) {
+  if (s.status === 'setup') return 'Setting up';
+  if (s.champion) return 'Winner: ' + esc(s.champion.name);
+  return `In progress · ${s.matches_done}/${s.matches_total} matches`;
+}
+
+// ---------- Saving to the server ----------
+// Runs one server action at a time. On failure: show the error, reload the
+// open tournament from the server so the screen matches what's saved.
+async function run(task) {
+  if (busy) return;
+  busy = true;
+  document.body.classList.add('busy');
+  try {
+    await task();
+  } catch (err) {
+    toast(err.message, true);
+    if (current && view.screen === 'tournament') {
+      try { current = await api.getTournament(current.id); } catch (e) {}
+      render();
+    }
+  } finally {
+    busy = false;
+    document.body.classList.remove('busy');
+  }
+}
+
+async function saveRounds(rounds) {
+  current = await api.updateTournament(current.id, { rounds });
+  view.match = null;
+  render();
+}
+
+// ---------- Routing: #/ = home, #/t/<id> = a tournament ----------
+async function route() {
+  view.match = null;
+  editingId = null;
+  formImage = null;
+  const m = location.hash.match(/^#\/t\/([0-9a-f-]{36})$/i);
+  if (m) await openTournament(m[1]);
+  else await loadHome();
+  window.scrollTo(0, 0);
+}
+window.addEventListener('hashchange', route);
+
+async function checkHealth() {
+  try {
+    await api.health();
+    server = { status: 'online', detail: 'API and database are reachable' };
+  } catch (err) {
+    server = { status: 'offline', detail: err.message };
+  }
+  const badge = document.getElementById('server-status');
+  if (badge) badge.outerHTML = serverBadge();
+}
+
+async function loadHome() {
+  current = null;
+  view.screen = 'loading';
+  render();
+  checkHealth();
+  try {
+    const mine = getMine();
+    summaries = mine.length ? await api.listTournaments(mine) : [];
+    // Forget tournaments that were deleted on the server
+    const found = new Set(summaries.map(s => s.id));
+    setMine(mine.filter(id => found.has(id)));
+    view.screen = 'home';
+  } catch (err) {
+    errorMessage = err.message;
+    view.screen = 'error';
+  }
+  render();
+}
+
+async function openTournament(id) {
+  if (!current || current.id !== id) {
+    view.screen = 'loading';
+    render();
+    try {
+      current = await api.getTournament(id);
+    } catch (err) {
+      if (err.status === 404) removeMine(id);
+      errorMessage = err.status === 404 ? "This tournament doesn't exist. It may have been deleted." : err.message;
+      view.screen = 'error';
+      render();
+      return;
+    }
+  }
+  addMine(id);
+  view.screen = 'tournament';
+  render();
 }
 
 // ---------- Rendering ----------
-function go(screen, tid = view.tid) {
-  view = { screen, tid, match: null };
-  editingId = null;
-  formImage = null;
-  render();
-  window.scrollTo(0, 0);
-}
-
 function render() {
-  const t = cur();
-  if (view.screen === 'home' || !t) { view.screen = 'home'; renderHome(); }
-  else if (view.screen === 'setup') renderSetup(t);
-  else renderBracket(t);
+  if (view.screen === 'loading') renderMessage('<p>Loading…</p>');
+  else if (view.screen === 'error') renderError();
+  else if (view.screen === 'home') renderHome();
+  else if (current.rounds) renderBracket(current);
+  else renderSetup(current);
   renderModal();
 }
 
+function renderMessage(html) {
+  $app.innerHTML = `<div class="message">${html}</div>`;
+}
+
+function renderError() {
+  renderMessage(`
+    <h2>Something went wrong</h2>
+    <p>${esc(errorMessage)}</p>
+    <div class="row">
+      <button class="btn" data-action="retry">Try again</button>
+      <button class="btn ghost" data-action="home">← All tournaments</button>
+    </div>`);
+}
+
+function serverBadge() {
+  const label = { checking: 'Checking server…', online: 'Server online', offline: 'Server offline' }[server.status];
+  return `<button class="server-status ${server.status}" id="server-status" data-action="health" title="${esc(server.detail)}">
+    <span class="dot"></span>${label}</button>`;
+}
+
 function renderHome() {
-  const list = [...state.tournaments].sort((a, b) => b.createdAt - a.createdAt);
+  const old = getOldTournaments();
   $app.innerHTML = `
     <header class="top">
-      <h1 class="logo">Bracket <span>Maker</span></h1>
+      <div class="row">
+        <h1 class="logo">Bracket <span>Maker</span></h1>
+        ${serverBadge()}
+      </div>
       <button class="btn primary" data-action="new">+ New tournament</button>
     </header>
-    ${list.length ? `<div class="tlist">${list.map(t => `
+    ${old.length ? `
+      <div class="panel row" style="justify-content:space-between;margin-bottom:16px">
+        <span>You have ${old.length} tournament${old.length === 1 ? '' : 's'} saved only in this browser from the old version.</span>
+        <button class="btn primary" data-action="import">Import to the server</button>
+      </div>` : ''}
+    ${summaries.length ? `<div class="tlist">${summaries.map(s => `
       <div class="tcard">
-        <div class="tcovers">${t.participants.slice(0, 4).map(p => imgTag(p, 'mini')).join('')}</div>
+        <div class="tcovers">${s.preview.map(p => imgTag(p, 'mini')).join('')}</div>
         <div class="tinfo">
-          <h2>${esc(t.name)}</h2>
-          <p>${t.participants.length} participant${t.participants.length === 1 ? '' : 's'} · ${statusLabel(t)}</p>
+          <h2>${esc(s.name)}</h2>
+          <p>${s.participant_count} participant${s.participant_count === 1 ? '' : 's'} · ${summaryStatus(s)}</p>
         </div>
         <div class="row">
-          <button class="btn primary" data-action="open" data-id="${t.id}">Open</button>
-          <button class="btn ghost danger" data-action="delete" data-id="${t.id}">Delete</button>
+          <button class="btn primary" data-action="open" data-id="${s.id}">Open</button>
+          <button class="btn ghost danger" data-action="delete" data-id="${s.id}">Delete</button>
         </div>
       </div>`).join('')}</div>`
     : `<div class="empty-state">
@@ -420,6 +375,10 @@ function renderSetup(t) {
       <div class="row">
         <button class="btn ghost" data-action="home">← All</button>
         <input class="title-input" id="title" value="${esc(t.name)}" maxlength="80" aria-label="Tournament name">
+      </div>
+      <div class="row">
+        <button class="btn ghost" data-action="copy-link">Copy link</button>
+        <button class="btn ghost danger" data-action="delete-current">Delete</button>
       </div>
     </header>
     <div class="setup">
@@ -446,14 +405,18 @@ function renderSetup(t) {
       </form>
       <section>
         <div class="startbar">
-          <span class="muted">${t.participants.length} participant${t.participants.length === 1 ? '' : 's'}</span>
+          <div class="row">
+            <span class="muted">${t.participants.length} participant${t.participants.length === 1 ? '' : 's'}</span>
+            <button class="btn small ghost" data-action="refresh-p" title="Reload participants from the server">↻ Refresh</button>
+          </div>
           <div class="row">
             <label><input type="checkbox" id="shuffle" checked> Shuffle seeding</label>
             <button class="btn primary" data-action="start" ${t.participants.length < 2 ? 'disabled' : ''}>Start tournament →</button>
           </div>
         </div>
-        ${t.participants.length ? `<div class="grid">${t.participants.map(p => `
+        ${t.participants.length ? `<div class="grid">${t.participants.map((p, i, all) => `
           <div class="pcard ${p.id === editingId ? 'editing' : ''}">
+            <span class="seed">#${i + 1}</span>
             ${imgTag(p, 'cover')}
             <div class="meta">
               <span class="name">${esc(p.name)}</span>
@@ -461,6 +424,10 @@ function renderSetup(t) {
               <div class="row" style="margin-top:auto">
                 <button class="btn small" data-action="edit-p" data-id="${p.id}">Edit</button>
                 <button class="btn small ghost danger" data-action="remove-p" data-id="${p.id}">Remove</button>
+              </div>
+              <div class="row">
+                <button class="btn small ghost" data-action="move-p" data-id="${p.id}" data-dir="-1" ${i === 0 ? 'disabled' : ''} title="Move earlier">←</button>
+                <button class="btn small ghost" data-action="move-p" data-id="${p.id}" data-dir="1" ${i === all.length - 1 ? 'disabled' : ''} title="Move later">→</button>
               </div>
             </div>
           </div>`).join('')}</div>`
@@ -470,6 +437,10 @@ function renderSetup(t) {
 
   if (editing && editing.image && editing.image.startsWith('data:') && formImage === null) formImage = editing.image;
   updatePreview();
+  if (selectTitle) {
+    selectTitle = false;
+    document.getElementById('title').select();
+  }
 }
 
 function updatePreview() {
@@ -497,7 +468,11 @@ function renderBracket(t) {
         <button class="btn ghost" data-action="home">← All</button>
         <h1 class="title">${esc(t.name)}</h1>
       </div>
-      <button class="btn ghost danger" data-action="reset">Reset bracket</button>
+      <div class="row">
+        <button class="btn ghost" data-action="copy-link">Copy link</button>
+        <button class="btn ghost danger" data-action="reset">Reset bracket</button>
+        <button class="btn ghost danger" data-action="delete-current">Delete</button>
+      </div>
     </header>
     <p class="progress">${done} of ${total} matches decided. Click a highlighted match to pick a winner.</p>
     ${champ ? (p => `
@@ -540,12 +515,12 @@ function contenderHtml(t, pid, m) {
 }
 
 function renderModal() {
-  const t = cur();
-  if (!view.match || !t || !t.rounds) {
+  if (!view.match || view.screen !== 'tournament' || !current.rounds) {
     $modal.hidden = true;
     $modal.innerHTML = '';
     return;
   }
+  const t = current;
   const { r, i } = view.match;
   const m = t.rounds[r][i];
   $modal.innerHTML = `
@@ -569,88 +544,189 @@ function closeModal() {
   renderModal();
 }
 
-// ---------- Events ----------
+// ---------- Actions ----------
+async function importOld() {
+  const remaining = getOldTournaments();
+  let imported = 0;
+  try {
+    while (remaining.length) {
+      const t = remaining[0];
+      const created = await api.createTournament({
+        name: t.name || 'Untitled tournament',
+        participants: t.participants || [],
+        rounds: t.rounds || null,
+      });
+      addMine(created.id);
+      remaining.shift();
+      imported++;
+    }
+  } finally {
+    // Keep only the ones that failed, so a retry doesn't create duplicates
+    try {
+      if (remaining.length) localStorage.setItem(OLD_KEY, JSON.stringify({ tournaments: remaining }));
+      else localStorage.removeItem(OLD_KEY);
+    } catch (e) {}
+    if (imported) toast(`Imported ${imported} tournament${imported === 1 ? '' : 's'}.`);
+    await loadHome();
+  }
+}
+
+function deleteTournament(id, name) {
+  if (!confirm(`Delete "${name}"? This deletes it for everyone who has the link, and can't be undone.`)) return;
+  run(async () => {
+    try {
+      await api.deleteTournament(id);
+    } catch (err) {
+      if (err.status !== 404) throw err;
+    }
+    removeMine(id);
+    current = null;
+    if (location.hash.startsWith('#/t/')) location.hash = '#/';
+    else await loadHome();
+    toast(`Deleted "${name}".`);
+  });
+}
+
+async function copyLink() {
+  const url = location.href;
+  try {
+    await navigator.clipboard.writeText(url);
+    toast('Link copied. Anyone with it can view and play this tournament.');
+  } catch (e) {
+    prompt('Copy this link:', url);
+  }
+}
+
 document.addEventListener('click', e => {
   if (e.target === $modal) return closeModal();
   const el = e.target.closest('[data-action]');
   if (!el || el.disabled) return;
-  const t = cur();
   switch (el.dataset.action) {
-    case 'new': {
-      const nt = { id: uid(), name: 'Untitled tournament', createdAt: Date.now(), participants: [], rounds: null };
-      state.tournaments.push(nt);
-      save();
-      go('setup', nt.id);
-      document.getElementById('title').select();
+    case 'new':
+      run(async () => {
+        current = await api.createTournament({ name: 'Untitled tournament' });
+        selectTitle = true;
+        location.hash = '#/t/' + current.id;
+      });
       break;
-    }
-    case 'open': {
-      const ot = state.tournaments.find(x => x.id === el.dataset.id);
-      go(ot.rounds ? 'bracket' : 'setup', ot.id);
+    case 'open':
+      location.hash = '#/t/' + el.dataset.id;
       break;
-    }
     case 'delete': {
-      const dt = state.tournaments.find(x => x.id === el.dataset.id);
-      if (confirm(`Delete "${dt.name}"? This can't be undone.`)) {
-        state.tournaments = state.tournaments.filter(x => x !== dt);
-        save();
-        render();
-      }
+      const s = summaries.find(x => x.id === el.dataset.id);
+      deleteTournament(s.id, s.name);
       break;
     }
-    case 'home': go('home', null); break;
-    case 'edit-p':
-      editingId = el.dataset.id;
-      formImage = null;
-      render();
-      document.querySelector('[name=pname]').focus();
+    case 'delete-current':
+      deleteTournament(current.id, current.name);
       break;
+    case 'health':
+      server = { status: 'checking', detail: '' };
+      el.outerHTML = serverBadge();
+      checkHealth();
+      break;
+    case 'import':
+      run(importOld);
+      break;
+    case 'home':
+      if (location.hash === '#/' || location.hash === '') route();
+      else location.hash = '#/';
+      break;
+    case 'retry':
+      route();
+      break;
+    case 'copy-link':
+      copyLink();
+      break;
+    case 'edit-p': {
+      const id = el.dataset.id;
+      run(async () => {
+        // Load the latest version, in case someone else changed it
+        const fresh = await api.getParticipant(id);
+        current.participants = current.participants.map(p => p.id === id ? fresh : p);
+        editingId = id;
+        formImage = null;
+        render();
+        document.querySelector('[name=pname]').focus();
+      });
+      break;
+    }
+    case 'refresh-p':
+      run(async () => {
+        current.participants = await api.listParticipants(current.id);
+        if (editingId && !person(current, editingId)) { editingId = null; formImage = null; }
+        render();
+        toast('Participants reloaded from the server.');
+      });
+      break;
+    case 'move-p': {
+      const list = current.participants;
+      const i = list.findIndex(p => p.id === el.dataset.id);
+      const j = i + Number(el.dataset.dir);
+      if (i < 0 || j < 0 || j >= list.length) break;
+      const order = [...list];
+      [order[i], order[j]] = [order[j], order[i]];
+      run(async () => {
+        // Save position = index for every participant whose position changed
+        const changed = order.filter((p, k) => p.position !== k);
+        const updated = await Promise.all(changed.map(p => api.updateParticipant(p.id, { position: order.indexOf(p) })));
+        const byId = new Map(updated.map(u => [u.id, u]));
+        current.participants = order.map(p => byId.get(p.id) || p);
+        render();
+      });
+      break;
+    }
     case 'cancel-edit':
       editingId = null;
       formImage = null;
       render();
       break;
-    case 'remove-p':
-      t.participants = t.participants.filter(p => p.id !== el.dataset.id);
-      if (editingId === el.dataset.id) { editingId = null; formImage = null; }
-      save();
-      render();
+    case 'remove-p': {
+      const id = el.dataset.id;
+      run(async () => {
+        await api.deleteParticipant(id);
+        current.participants = current.participants.filter(p => p.id !== id);
+        if (editingId === id) { editingId = null; formImage = null; }
+        render();
+      });
       break;
+    }
     case 'clear-image':
       formImage = null;
       document.querySelector('[name=pimage]').value = '';
       document.getElementById('file').value = '';
       updatePreview();
       break;
-    case 'start':
-      buildRounds(t, document.getElementById('shuffle').checked);
-      save();
-      go('bracket');
+    case 'start': {
+      const draft = { participants: current.participants, rounds: null };
+      buildRounds(draft, document.getElementById('shuffle').checked);
+      run(() => saveRounds(draft.rounds));
       break;
+    }
     case 'reset':
       if (confirm('Reset the bracket? All picks will be lost, but the participants are kept.')) {
-        t.rounds = null;
-        save();
-        go('setup');
+        run(() => saveRounds(null));
       }
       break;
     case 'open-match':
       view.match = { r: +el.dataset.r, i: +el.dataset.i };
       renderModal();
       break;
-    case 'pick':
-      advance(t, view.match.r, view.match.i, el.dataset.pid);
-      save();
-      view.match = null;
-      render();
+    case 'pick': {
+      const draft = { rounds: structuredClone(current.rounds) };
+      advance(draft, view.match.r, view.match.i, el.dataset.pid);
+      run(() => saveRounds(draft.rounds));
       break;
-    case 'undo':
-      undo(t, view.match.r, view.match.i);
-      save();
-      view.match = null;
-      render();
+    }
+    case 'undo': {
+      const draft = { rounds: structuredClone(current.rounds) };
+      undo(draft, view.match.r, view.match.i);
+      run(() => saveRounds(draft.rounds));
       break;
-    case 'close': closeModal(); break;
+    }
+    case 'close':
+      closeModal();
+      break;
   }
 });
 
@@ -660,9 +736,11 @@ document.addEventListener('keydown', e => {
 
 document.addEventListener('change', async e => {
   if (e.target.id === 'title') {
-    const t = cur();
-    t.name = e.target.value.trim() || 'Untitled tournament';
-    save();
+    const name = e.target.value.trim() || 'Untitled tournament';
+    run(async () => {
+      current = await api.updateTournament(current.id, { name });
+      e.target.value = current.name;
+    });
   }
   if (e.target.id === 'file' && e.target.files[0]) {
     try {
@@ -670,7 +748,7 @@ document.addEventListener('change', async e => {
       document.querySelector('[name=pimage]').value = '';
       updatePreview();
     } catch (err) {
-      alert("That file couldn't be read as an image.");
+      toast("That file couldn't be read as an image.", true);
     }
   }
 });
@@ -685,27 +763,23 @@ document.addEventListener('input', e => {
 document.addEventListener('submit', e => {
   if (e.target.id !== 'pform') return;
   e.preventDefault();
-  const t = cur();
   const f = e.target.elements;
   const name = f.pname.value.trim();
   if (!name) return;
   const data = { name, image: formImage || safeUrl(f.pimage.value, false), link: safeUrl(f.plink.value, false) };
-  if (editingId) {
-    const p = person(t, editingId);
-    const old = { ...p };
-    Object.assign(p, data);
-    if (!save()) { Object.assign(p, old); return; }
-  } else {
-    t.participants.push({ id: uid(), ...data });
-    if (!save()) { t.participants.pop(); return; }
-  }
-  editingId = null;
-  formImage = null;
-  render();
-  document.querySelector('[name=pname]').focus();
+  run(async () => {
+    if (editingId) {
+      const updated = await api.updateParticipant(editingId, data);
+      current.participants = current.participants.map(p => p.id === updated.id ? updated : p);
+    } else {
+      const created = await api.createParticipant({ tournament_id: current.id, ...data });
+      current.participants.push(created);
+    }
+    editingId = null;
+    formImage = null;
+    render();
+    document.querySelector('[name=pname]').focus();
+  });
 });
 
-render();
-</script>
-</body>
-</html>
+route();
