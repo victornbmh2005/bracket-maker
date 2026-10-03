@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Graph Paper Tic-Tac-Toe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+/* Layout: one centered sheet of graph paper — status line, hand-drawn board, tally-mark scoreboard, controls */
+:root {
+  --paper: #f3f6fa;
+  --grid: #d6e0ec;
+  --ink: #1f2a3a;
+  --muted: #5b6b80;
+  --x: #d4473a;
+  --o: #2763c4;
+  --win: #e8b931;
+  --btn: #ffffff;
+  --display: "Permanent Marker", "Comic Sans MS", cursive;
+  --body: "Atkinson Hyperlegible", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #1d2a26; --grid: #2a3a35; --ink: #eef2ee; --muted: #9fb3ab;
+    --x: #ff8a7a; --o: #8cc3ff; --win: #ffd75e; --btn: #24352f; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #1d2a26; --grid: #2a3a35; --ink: #eef2ee; --muted: #9fb3ab;
+  --x: #ff8a7a; --o: #8cc3ff; --win: #ffd75e; --btn: #24352f; color-scheme: dark;
+}
+html, body { min-height: 100%; }
+body {
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 16px;
+  padding: 0 16px;
+}
+main {
+  max-width: 440px; margin: 0 auto; padding-block: 32px 40px;
+  display: flex; flex-direction: column; gap: 20px; align-items: stretch;
+}
+h1 {
+  font-family: var(--display); font-weight: 400; font-size: clamp(1.8rem, 7vw, 2.4rem);
+  margin: 0; text-align: center; text-wrap: balance; transform: rotate(-1.5deg);
+}
+h1 .x { color: var(--x); } h1 .o { color: var(--o); }
+.modes { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.modes button, .again {
+  font: 700 0.9rem var(--body); color: var(--ink); background: var(--btn);
+  border: 2px solid var(--ink); border-radius: 999px; padding: 6px 14px; cursor: pointer;
+}
+.modes button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+button:focus-visible { outline: 3px solid var(--win); outline-offset: 2px; }
+#status {
+  font-family: var(--display); font-size: 1.35rem; text-align: center; min-height: 1.6em; margin: 0;
+}
+#status .x { color: var(--x); } #status .o { color: var(--o); }
+.board-wrap { position: relative; width: 100%; max-width: 100%; aspect-ratio: 1; }
+.board {
+  position: absolute; inset: 0; display: grid;
+  grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+}
+.cell {
+  background: transparent; border: 0; padding: 12%; cursor: pointer; color: inherit;
+  display: grid; place-items: center; border-radius: 12px;
+}
+.cell:disabled { cursor: default; }
+.cell:not(:disabled):hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.cell svg { width: 100%; height: 100%; overflow: visible; }
+.cell path, .cell circle { fill: none; stroke-width: 9; stroke-linecap: round; }
+.mark-x path { stroke: var(--x); stroke-dasharray: 100; stroke-dashoffset: 100; animation: draw .18s ease-out forwards; }
+.mark-x path:nth-child(2) { animation-delay: .16s; }
+.mark-o circle { stroke: var(--o); stroke-dasharray: 100; stroke-dashoffset: 100; animation: draw .32s ease-out forwards; }
+.cell.dim svg { opacity: .3; transition: opacity .3s; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+svg.lines, svg.strike { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+svg.lines path { stroke: var(--ink); stroke-width: 1.4; fill: none; stroke-linecap: round; }
+svg.strike line {
+  stroke: var(--win); stroke-width: 3.2; stroke-linecap: round;
+  stroke-dasharray: 160; stroke-dashoffset: 160; animation: draw .4s ease-out forwards;
+}
+.score {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center;
+  border-top: 2px dashed var(--muted); padding-top: 14px;
+}
+.score .label { font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; }
+.score .who { font-family: var(--display); font-size: 1.1rem; }
+.score .tally { min-height: 30px; display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.score .num { font-variant-numeric: tabular-nums; color: var(--muted); font-size: .85rem; }
+.tally svg { width: 30px; height: 26px; }
+.tally line { stroke: var(--ink); stroke-width: 2.2; stroke-linecap: round; }
+.actions { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+.again.ghost { border-color: var(--muted); color: var(--muted); background: transparent; }
+@media (prefers-reduced-motion: reduce) {
+  .mark-x path, .mark-o circle, svg.strike line { animation: none; stroke-dashoffset: 0; }
+}
+</style>
+</head>
+<body>
+
+<main>
+  <h1><span class="x">X</span>s &amp; <span class="o">O</span>s</h1>
+
+  <div class="modes" role="group" aria-label="Opponent">
+    <button id="mode-easy" data-mode="easy">vs Computer · Easy</button>
+    <button id="mode-hard" data-mode="hard">vs Computer · Unbeatable</button>
+    <button id="mode-pvp" data-mode="pvp">2 Players</button>
+  </div>
+
+  <p id="status" aria-live="polite"></p>
+
+  <div class="board-wrap">
+    <svg class="lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M33.6 3 C33 30, 34.2 65, 33.2 97"/>
+      <path d="M66.5 2.5 C67.2 35, 66 70, 66.9 97.5"/>
+      <path d="M3 33.4 C30 32.8, 70 34.2, 97 33.1"/>
+      <path d="M2.5 66.8 C35 67.4, 65 66.2, 97.5 66.6"/>
+    </svg>
+    <div class="board" id="board"></div>
+    <svg class="strike" id="strike" viewBox="0 0 100 100" aria-hidden="true"></svg>
+  </div>
+
+  <section class="score" aria-label="Score">
+    <div><div class="label">Player</div><div class="who" style="color:var(--x)">X</div><div class="tally" id="t-x"></div><div class="num" id="n-x"></div></div>
+    <div><div class="label">Draws</div><div class="who">—</div><div class="tally" id="t-d"></div><div class="num" id="n-d"></div></div>
+    <div><div class="label" id="o-label">Computer</div><div class="who" style="color:var(--o)">O</div><div class="tally" id="t-o"></div><div class="num" id="n-o"></div></div>
+  </section>
+
+  <div class="actions">
+    <button class="again" id="again">New round</button>
+    <button class="again ghost" id="reset">Clear score</button>
+  </div>
+</main>
+
+<script>
+const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+const X_SVG = '<svg viewBox="0 0 100 100" class="mark-x"><path pathLength="100" d="M18 16 C40 40, 60 60, 84 85"/><path pathLength="100" d="M83 15 C60 40, 40 62, 17 84"/></svg>';
+const O_SVG = '<svg viewBox="0 0 100 100" class="mark-o"><circle pathLength="100" cx="50" cy="50" r="34" transform="rotate(-80 50 50)"/></svg>';
+
+let S;
+const boardEl = document.getElementById('board');
+const cells = [];
+for (let i = 0; i < 9; i++) {
+  const b = document.createElement('button');
+  b.className = 'cell'; b.id = 'cell-' + i;
+  b.addEventListener('click', () => play(i));
+  boardEl.appendChild(b); cells.push(b);
+}
+
+function winner(b) {
+  for (const l of LINES) if (b[l[0]] && b[l[0]] === b[l[1]] && b[l[0]] === b[l[2]]) return { p: b[l[0]], line: l };
+  return b.every(Boolean) ? { p: 'draw' } : null;
+}
+
+function minimax(b, turn) {
+  const w = winner(b);
+  if (w) return { score: w.p === 'O' ? 10 : w.p === 'X' ? -10 : 0 };
+  let best = { score: turn === 'O' ? -Infinity : Infinity };
+  for (let i = 0; i < 9; i++) if (!b[i]) {
+    b[i] = turn;
+    const r = minimax(b, turn === 'O' ? 'X' : 'O');
+    b[i] = null;
+    const s = r.score - Math.sign(r.score) * 0.1; // prefer faster wins, slower losses
+    if (turn === 'O' ? s > best.score : s < best.score) best = { score: s, move: i };
+  }
+  return best;
+}
+
+function computerMove() {
+  const empty = S.board.map((v, i) => v ? null : i).filter(v => v !== null);
+  if (S.mode === 'easy') {
+    // Easy: takes an immediate win half the time, otherwise random
+    if (Math.random() < 0.5) {
+      for (const i of empty) { const t = S.board.slice(); t[i] = 'O'; if (winner(t)?.p === 'O') return i; }
+    }
+    return empty[Math.floor(Math.random() * empty.length)];
+  }
+  return minimax(S.board.slice(), 'O').move;
+}
+
+function play(i) {
+  if (S.board[i] || S.over || S.thinking) return;
+  S.board[i] = S.turn;
+  S.last = i;
+  const w = winner(S.board);
+  if (w) finish(w);
+  else S.turn = S.turn === 'X' ? 'O' : 'X';
+  render();
+  if (!S.over && S.mode !== 'pvp' && S.turn === 'O') {
+    S.thinking = true; render();
+    setTimeout(() => { S.thinking = false; play(computerMove()); }, 450);
+  }
+}
+
+function finish(w) {
+  S.over = true; S.result = w;
+  if (w.p === 'draw') S.score.d++; else S.score[w.p.toLowerCase()]++;
+}
+
+function newRound() {
+  S.round++;
+  S.board = Array(9).fill(null);
+  S.over = false; S.result = null; S.thinking = false; S.last = null;
+  // alternate who starts each round
+  S.turn = S.round % 2 === 0 ? 'X' : 'O';
+  render();
+  if (S.mode !== 'pvp' && S.turn === 'O') {
+    S.thinking = true; render();
+    setTimeout(() => { S.thinking = false; play(computerMove()); }, 500);
+  }
+}
+
+function tally(n) {
+  let html = '';
+  for (let g = 0; g < Math.ceil(n / 5); g++) {
+    const k = Math.min(5, n - g * 5);
+    let lines = '';
+    for (let j = 0; j < Math.min(k, 4); j++) lines += `<line x1="${5 + j * 6}" y1="3" x2="${4 + j * 6}" y2="23"/>`;
+    if (k === 5) lines += '<line x1="1" y1="19" x2="27" y2="6"/>';
+    html += `<svg viewBox="0 0 30 26">${lines}</svg>`;
+  }
+  return html;
+}
+
+const centers = i => [16.7 + (i % 3) * 33.3, 16.7 + Math.floor(i / 3) * 33.3];
+
+let drawn = [];
+function render() {
+  S.board.forEach((v, i) => {
+    const c = cells[i];
+    if (drawn[i] !== v) { c.innerHTML = v === 'X' ? X_SVG : v === 'O' ? O_SVG : ''; drawn[i] = v; }
+    c.disabled = !!v || S.over || S.thinking || (S.mode !== 'pvp' && S.turn === 'O');
+    c.classList.toggle('dim', !!(S.over && S.result.line && !S.result.line.includes(i)));
+    c.setAttribute('aria-label', `Row ${Math.floor(i / 3) + 1}, column ${i % 3 + 1}: ${v || 'empty'}`);
+  });
+  const strike = document.getElementById('strike');
+  if (S.over && S.result.line) {
+    const [a, , c] = S.result.line, [x1, y1] = centers(a), [x2, y2] = centers(c);
+    const dx = (x2 - x1) * 0.18, dy = (y2 - y1) * 0.18;
+    const html = `<line pathLength="160" x1="${x1 - dx}" y1="${y1 - dy}" x2="${x2 + dx}" y2="${y2 + dy}"/>`;
+    if (strike.dataset.k !== html) { strike.innerHTML = html; strike.dataset.k = html; }
+  } else { strike.innerHTML = ''; strike.dataset.k = ''; }
+
+  const name = p => S.mode === 'pvp' ? `Player <span class="${p.toLowerCase()}">${p}</span>` : p === 'X' ? 'You' : 'Computer';
+  const st = document.getElementById('status');
+  if (S.over) {
+    st.innerHTML = S.result.p === 'draw' ? "Cat's game. It's a draw."
+      : S.mode === 'pvp' ? `${name(S.result.p)} wins!`
+      : S.result.p === 'X' ? 'You win!' : 'Computer wins.';
+  } else if (S.thinking) st.textContent = 'Computer is thinking…';
+  else st.innerHTML = S.mode === 'pvp' ? `${name(S.turn)} to move` : `Your move as <span class="x">X</span>`;
+
+  for (const k of ['x', 'd', 'o']) {
+    document.getElementById('t-' + k).innerHTML = tally(S.score[k]);
+    document.getElementById('n-' + k).textContent = S.score[k];
+  }
+  document.getElementById('o-label').textContent = S.mode === 'pvp' ? 'Player' : 'Computer';
+  document.querySelectorAll('.modes button').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === S.mode));
+  document.getElementById('again').textContent = S.over ? 'Play again' : 'New round';
+}
+
+document.querySelectorAll('.modes button').forEach(b => b.addEventListener('click', () => {
+  if (S.mode === b.dataset.mode) return;
+  S.mode = b.dataset.mode; S.score = { x: 0, o: 0, d: 0 }; S.round = -1; newRound();
+}));
+document.getElementById('again').addEventListener('click', newRound);
+document.getElementById('reset').addEventListener('click', () => { S.score = { x: 0, o: 0, d: 0 }; render(); });
+
+function start(saved) {
+  S = saved && saved.board ? saved : {
+    mode: 'hard', board: Array(9).fill(null), turn: 'X', over: false, result: null,
+    thinking: false, score: { x: 0, o: 0, d: 0 }, round: 0, last: null
+  };
+  S.thinking = false;
+  render();
+  if (!S.over && S.mode !== 'pvp' && S.turn === 'O') play(computerMove());
+}
+window.claude?.hot?.snapshot?.(() => S);
+window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+</script>
+</body>
+</html>
