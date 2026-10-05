@@ -115,6 +115,26 @@ export default {
       },
     },
 
+    '/api/participants/import': {
+      post: {
+        tags: ['Participants'],
+        summary: 'Import a YouTube playlist as participants',
+        description:
+          'Every available video becomes a participant (title, thumbnail, video link), added after the existing ones. ' +
+          'Private and deleted videos are skipped. Stops at 256 participants. ' +
+          'The playlist must be public or unlisted. Needs `YOUTUBE_API_KEY` on the server.',
+        requestBody: { required: true, ...json(ref('PlaylistImport')) },
+        responses: {
+          201: { description: 'Imported', ...json(ref('PlaylistImportResult')) },
+          400: resp('BadRequest'),
+          404: resp('NotFound'),
+          409: resp('Conflict'),
+          502: { description: 'YouTube could not be reached or refused the request', ...json(ref('Error')) },
+          503: { description: 'Import not configured, or daily YouTube quota used up', ...json(ref('Error')) },
+        },
+      },
+    },
+
     '/api/participants/{id}': {
       parameters: [idParam('Participant id')],
       get: {
@@ -188,6 +208,27 @@ export default {
           image: { type: 'string', example: 'https://picsum.photos/300' },
           link: { type: 'string', example: 'https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC' },
           position: { type: 'integer', minimum: 0, example: 0 },
+        },
+      },
+      PlaylistImport: {
+        type: 'object',
+        required: ['tournament_id', 'url'],
+        properties: {
+          tournament_id: uuid,
+          url: {
+            type: 'string',
+            description: 'Playlist link (youtube.com or music.youtube.com, anything with list=…) or a playlist id',
+            example: 'https://www.youtube.com/playlist?list=PASTE_A_PLAYLIST_ID',
+          },
+        },
+      },
+      PlaylistImportResult: {
+        type: 'object',
+        properties: {
+          playlist_title: { type: 'string' },
+          added: { type: 'array', items: ref('Participant') },
+          skipped_unavailable: { type: 'integer', description: 'Private or deleted videos that were skipped' },
+          truncated: { type: 'boolean', description: 'true if the playlist had more videos than room left (256 max)' },
         },
       },
       Tournament: {

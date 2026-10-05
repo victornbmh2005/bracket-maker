@@ -382,6 +382,7 @@ function renderSetup(t) {
       </div>
     </header>
     <div class="setup">
+      <div class="side">
       <form class="panel" id="pform" autocomplete="off">
         <h2>${editing ? 'Edit participant' : 'Add participant'}</h2>
         <label class="field">Name
@@ -403,6 +404,15 @@ function renderSetup(t) {
           ${editing ? '<button type="button" class="btn ghost" data-action="cancel-edit">Cancel</button>' : ''}
         </div>
       </form>
+      <form class="panel" id="ytform" autocomplete="off">
+        <h2>Import YouTube playlist</h2>
+        <label class="field">Playlist link
+          <input type="url" name="ytlist" required placeholder="https://youtube.com/playlist?list=…">
+        </label>
+        <p class="muted hint">Each video becomes a participant with its title, thumbnail and player. The playlist must be public or unlisted.</p>
+        <button class="btn primary">Import videos</button>
+      </form>
+      </div>
       <section>
         <div class="startbar">
           <div class="row">
@@ -758,6 +768,34 @@ document.addEventListener('input', e => {
     formImage = null;
     updatePreview();
   }
+});
+
+// Import a YouTube playlist (POST /api/participants/import)
+document.addEventListener('submit', e => {
+  if (e.target.id !== 'ytform') return;
+  e.preventDefault();
+  const url = e.target.elements.ytlist.value.trim();
+  if (!url) return;
+  const button = e.target.querySelector('button');
+  button.textContent = 'Importing…';
+  run(async () => {
+    try {
+      const result = await api.importPlaylist({ tournament_id: current.id, url });
+      current.participants.push(...result.added);
+      // Name an untitled tournament after the playlist
+      if (current.name === 'Untitled tournament' && result.playlist_title) {
+        const renamed = await api.updateTournament(current.id, { name: result.playlist_title.slice(0, 80) });
+        current.name = renamed.name;
+      }
+      let message = `Added ${result.added.length} video${result.added.length === 1 ? '' : 's'}.`;
+      if (result.skipped_unavailable) message += ` Skipped ${result.skipped_unavailable} private/deleted.`;
+      if (result.truncated) message += ' Stopped at the 256 participant limit.';
+      toast(message);
+      render();
+    } finally {
+      if (button.isConnected) button.textContent = 'Import videos';
+    }
+  });
 });
 
 document.addEventListener('submit', e => {

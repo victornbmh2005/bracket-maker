@@ -27,6 +27,11 @@ The browser only talks to the backend, and only the backend talks to the databas
 Participants can't be created, changed or deleted while a tournament's bracket is running (the API returns 409).
 Reset the bracket first.
 
+**YouTube playlist import:** `POST /api/participants/import` with `{tournament_id, url}` turns every video in a
+public or unlisted playlist into a participant. It needs `YOUTUBE_API_KEY` set on the backend (locally in
+`backend/.env`, and on Render under Environment). To get a key: Google Cloud Console → enable **YouTube Data API v3**
+→ Credentials → Create API key.
+
 **Try the endpoints in Swagger:** with the backend running, open http://localhost:3000/api/docs. The spec is in
 `backend/src/openapi.js`; update it whenever a route changes.
 

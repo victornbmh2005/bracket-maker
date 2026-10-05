@@ -190,3 +190,7 @@ body.busy button, body.busy .btn { pointer-events: none; opacity: .7; }
   background: rgba(0,0,0,.65); color: #fff; font-size: 12px; font-weight: 700;
   border-radius: 6px; padding: 1px 7px;
 }
+
+/* Setup side column: add form + playlist import */
+.side { display: flex; flex-direction: column; gap: 16px; }
+.hint { font-size: 13px; margin: -4px 0 12px; }
