@@ -7,6 +7,7 @@ import { pool } from './db.js';
 import { HttpError } from './validate.js';
 import tournaments from './routes/tournaments.js';
 import participants from './routes/participants.js';
+import runs from './routes/runs.js';
 
 export const app = express();
 
@@ -33,6 +34,7 @@ app.get('/api/health', async (req, res) => {
 
 app.use('/api/tournaments', tournaments);
 app.use('/api/participants', participants);
+app.use('/api/runs', runs);
 
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
 

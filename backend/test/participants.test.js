@@ -55,21 +55,40 @@ test('bad input is rejected', async () => {
   await call('DELETE', `/participants/${p.id}`);
 });
 
-test('participants are locked while a bracket is running', async () => {
+test('participants are locked while a run is in progress', async () => {
   const a = (await add('A')).data;
   const b = (await add('B')).data;
-  const rounds = [[{ a: a.id, b: b.id, winner: null }]];
-  assert.equal((await call('PATCH', `/tournaments/${tid}`, { rounds })).status, 200);
+  const run = (await call('POST', '/runs', { tournament_id: tid, size: 2 })).data;
 
   assert.equal((await add('Late')).status, 409);
   assert.equal((await call('PATCH', `/participants/${a.id}`, { name: 'x' })).status, 409);
   assert.equal((await call('DELETE', `/participants/${a.id}`)).status, 409);
   assert.equal((await call('POST', '/participants/import/spotify', { tournament_id: tid, links: 'spotify:track:4uLU6hMCjMI75M1A2tKUQC' })).status, 409);
 
-  await call('PATCH', `/tournaments/${tid}`, { rounds: null });
+  await call('DELETE', `/runs/${run.id}`);
   assert.equal((await call('PATCH', `/participants/${a.id}`, { name: 'Unlocked' })).status, 200);
   await call('DELETE', `/participants/${a.id}`);
   await call('DELETE', `/participants/${b.id}`);
+});
+
+test('someone who was in a run is archived instead of deleted', async () => {
+  const a = (await add('Player A')).data;
+  const b = (await add('Player B')).data;
+  const c = (await add('Player C')).data;
+  // Cut to 2: two play, one sits out. All three are now part of the run's history.
+  const run = (await call('POST', '/runs', { tournament_id: tid, size: 2 })).data;
+  const rounds = structuredClone(run.rounds);
+  rounds[0][0].winner = rounds[0][0].a;
+  assert.equal((await call('PATCH', `/runs/${run.id}`, { rounds })).status, 200);   // finished
+
+  const newcomer = (await add('Newcomer')).data;   // allowed: the run is finished
+  for (const p of [a, b, c, newcomer]) assert.equal((await call('DELETE', `/participants/${p.id}`)).status, 204);
+
+  assert.deepEqual((await call('GET', `/participants?tournament_id=${tid}`)).data, []);
+  const all = (await call('GET', `/participants?tournament_id=${tid}&include_archived=true`)).data;
+  assert.deepEqual(all.map(p => p.name).sort(), ['Player A', 'Player B', 'Player C']);   // newcomer really deleted
+  assert.ok(all.every(p => p.archived));
+  await call('DELETE', `/runs/${run.id}`);
 });
 
 test('imports reject bad links before contacting YouTube or Spotify', async () => {

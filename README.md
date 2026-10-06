@@ -5,14 +5,17 @@ uploaded file) and an optional link. Then pick the winner of each matchup until 
 
 - YouTube and Spotify links play right inside the matchup.
 - There are no accounts. Each tournament has a private link, and anyone you send it to can view and play.
-- When the number of participants isn't a power of 2, some get a "bye" and move on automatically.
+- Play the same tournament many times ("runs"). Each run, choose a bracket size: **cut** to a smaller bracket
+  (random participants sit out, and whoever sat out before plays first) or **everyone plays** (with a play-in
+  round when the count isn't a power of 2).
+- **Stats** add up across runs: titles, win rate, W–L, best finish, times sat out. **History** keeps every run.
 
 ## How it's organized
 
 ```
 frontend/   Plain HTML + CSS + JavaScript (no build step)   → hosted on Vercel
 backend/    Node.js + Express REST API                       → hosted on Render
-            backend/db/schema.sql holds the database tables  → PostgreSQL on Neon
+            backend/db/migrations/ holds the database tables → PostgreSQL on Neon
 ```
 
 The browser only talks to the backend, and only the backend talks to the database.
@@ -23,9 +26,12 @@ The browser only talks to the backend, and only the backend talks to the databas
 |---|---|---|---|---|---|
 | tournaments  | `POST /api/tournaments`  | `GET /api/tournaments?ids=a,b`              | `GET /api/tournaments/:id`  | `PATCH /api/tournaments/:id`  | `DELETE /api/tournaments/:id`  |
 | participants | `POST /api/participants` | `GET /api/participants?tournament_id=…`     | `GET /api/participants/:id` | `PATCH /api/participants/:id` | `DELETE /api/participants/:id` |
+| runs         | `POST /api/runs`         | `GET /api/runs?tournament_id=…`             | `GET /api/runs/:id`         | `PATCH /api/runs/:id`         | `DELETE /api/runs/:id`         |
 
-Participants can't be created, changed or deleted while a tournament's bracket is running (the API returns 409).
-Reset the bracket first.
+Also: `GET /api/runs/options?tournament_id=…` (bracket sizes) and `GET /api/tournaments/:id/stats`.
+
+Participants can't be created, changed or deleted while a run is in progress (the API returns 409). Finish or
+delete the run first. Deleting someone who was in a run archives them instead, so history and stats keep them.
 
 **YouTube playlist import:** `POST /api/participants/import/youtube` with `{tournament_id, url}` turns every video in a
 public or unlisted playlist into a participant. It needs `YOUTUBE_API_KEY` set on the backend (locally in
@@ -40,6 +46,12 @@ no key is needed. Names are the song title only, without the artist.
 **Try the endpoints in Swagger:** with the backend running, open http://localhost:3000/api/docs. The spec is in
 `backend/src/openapi.js`; update it whenever a route changes.
 
+### Database migrations
+
+Each change to the tables is a numbered SQL file in `backend/db/migrations/` (`001_initial.sql`, `002_runs.sql`, …).
+`npm run migrate` applies the ones not applied yet (tracked in the `schema_migrations` table). On Render, `npm start`
+runs the migrations before starting the server, so a deploy updates the live database automatically.
+
 ## Run it on your computer
 
 Needs Node.js 20.6 or newer.
@@ -50,7 +62,7 @@ Needs Node.js 20.6 or newer.
    cd backend
    cp .env.example .env        # then paste the connection string into DATABASE_URL
    npm install
-   npm run migrate             # creates the tables
+   npm run migrate             # creates/updates the tables
    npm run dev                 # API on http://localhost:3000
    ```
 3. **Frontend**, in a second terminal:

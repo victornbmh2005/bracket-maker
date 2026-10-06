@@ -1,33 +1,39 @@
 // CRUD for the tournaments table.
-//   POST   /api/tournaments          create (or import, when participants are sent too)
-//   GET    /api/tournaments?ids=a,b  list the given tournaments (summaries)
-//   GET    /api/tournaments/:id      read one, with its participants
-//   PATCH  /api/tournaments/:id      update name and/or rounds
-//   DELETE /api/tournaments/:id      delete (participants go with it)
+//   POST   /api/tournaments            create (or import, when participants are sent too)
+//   GET    /api/tournaments?ids=a,b    list the given tournaments (summaries)
+//   GET    /api/tournaments/:id        read one, with its participants and latest run
+//   PATCH  /api/tournaments/:id        rename
+//   DELETE /api/tournaments/:id        delete (participants and runs go with it)
+//   GET    /api/tournaments/:id/stats  per-participant stats over all runs
+// Brackets live in runs (routes/runs.js).
 import { Router } from 'express';
 import { pool, withTransaction } from '../db.js';
 import { HttpError, isUuid, requireUuid, cleanName, cleanImage, cleanLink, cleanRounds } from '../validate.js';
+import { championOf, computeStats } from '../bracket.js';
 
 const router = Router();
 const NOT_FOUND = 'Tournament not found';
 const MAX_PARTICIPANTS = 256;
 
+export const RUN_COLUMNS = 'id, tournament_id, number, mode, rounds, sat_out, champion_id, created_at, finished_at';
+
 async function loadTournament(db, id) {
-  const { rows } = await db.query(
-    'SELECT id, name, rounds, created_at, updated_at FROM tournaments WHERE id = $1',
-    [id]
-  );
+  const { rows } = await db.query('SELECT id, name, created_at, updated_at FROM tournaments WHERE id = $1', [id]);
   if (!rows[0]) throw new HttpError(404, NOT_FOUND);
-  const { rows: participants } = await db.query(
-    `SELECT id, tournament_id, name, image, link, position, created_at
-       FROM participants WHERE tournament_id = $1
-      ORDER BY position, created_at`,
-    [id]
-  );
-  return { ...rows[0], participants };
+  const [{ rows: participants }, { rows: runs }, { rows: [{ count }] }] = await Promise.all([
+    db.query(
+      `SELECT id, tournament_id, name, image, link, position, archived, created_at
+         FROM participants WHERE tournament_id = $1
+        ORDER BY position, created_at`,
+      [id]
+    ),
+    db.query(`SELECT ${RUN_COLUMNS} FROM runs WHERE tournament_id = $1 ORDER BY number DESC LIMIT 1`, [id]),
+    db.query('SELECT count(*)::int AS count FROM runs WHERE tournament_id = $1', [id]),
+  ]);
+  return { ...rows[0], participants, latest_run: runs[0] ?? null, run_count: count };
 }
 
-// Matches decided / total. Byes (round 1 with an empty side) don't count.
+// Matches decided / total in a run. One-player (play-in bye) matches don't count.
 function progress(rounds) {
   let done = 0, total = 0;
   rounds.forEach((round, r) => round.forEach(m => {
@@ -39,8 +45,8 @@ function progress(rounds) {
 }
 
 // Create. {name} makes an empty tournament. {name, participants, rounds}
-// imports one (e.g. from the old browser-only version): participants get new
-// ids, and the old ids inside rounds are swapped for the new ones.
+// imports one from the old browser-only version: participants get new ids,
+// and the bracket (with old ids swapped for new ones) becomes run #1.
 router.post('/', async (req, res) => {
   const body = req.body ?? {};
   const name = cleanName(body.name ?? 'Untitled tournament');
@@ -89,7 +95,12 @@ router.post('/', async (req, res) => {
         return round.map(m => ({ a: remap(m?.a), b: remap(m?.b), winner: remap(m?.winner) }));
       });
       const rounds = cleanRounds(remapped, newIds);
-      await client.query('UPDATE tournaments SET rounds = $2 WHERE id = $1', [tid, JSON.stringify(rounds)]);
+      const champion = championOf(rounds);
+      await client.query(
+        `INSERT INTO runs (tournament_id, number, mode, rounds, champion_id, finished_at)
+         VALUES ($1, 1, 'all', $2, $3, CASE WHEN $3::uuid IS NULL THEN NULL ELSE now() END)`,
+        [tid, JSON.stringify(rounds), champion]
+      );
     }
     return tid;
   });
@@ -108,25 +119,30 @@ router.get('/', async (req, res) => {
   if (!ids.length) return res.json([]);
 
   const { rows } = await pool.query(
-    `SELECT t.id, t.name, t.rounds, t.created_at, t.updated_at,
-            (SELECT count(*)::int FROM participants p WHERE p.tournament_id = t.id) AS participant_count,
+    `SELECT t.id, t.name, t.created_at, t.updated_at,
+            (SELECT count(*)::int FROM participants p WHERE p.tournament_id = t.id AND NOT p.archived) AS participant_count,
             COALESCE((SELECT json_agg(x) FROM (
                 SELECT id, name, image FROM participants p
-                 WHERE p.tournament_id = t.id ORDER BY position, created_at LIMIT 4
+                 WHERE p.tournament_id = t.id AND NOT p.archived ORDER BY position, created_at LIMIT 4
               ) x), '[]') AS preview,
+            (SELECT count(*)::int FROM runs r WHERE r.tournament_id = t.id) AS run_count,
+            lr.number AS run_number, lr.rounds AS run_rounds, lr.finished_at AS run_finished_at,
             (SELECT row_to_json(c) FROM (
-                SELECT id, name, image FROM participants p
-                 WHERE p.id::text = t.rounds -> -1 -> 0 ->> 'winner'
+                SELECT id, name, image FROM participants p WHERE p.id = lr.champion_id
               ) c) AS champion
        FROM tournaments t
+       LEFT JOIN LATERAL (
+         SELECT number, rounds, finished_at, champion_id FROM runs r
+          WHERE r.tournament_id = t.id ORDER BY number DESC LIMIT 1
+       ) lr ON true
       WHERE t.id = ANY($1::uuid[])
       ORDER BY t.created_at DESC`,
     [ids]
   );
 
-  res.json(rows.map(({ rounds, ...t }) => {
-    const { done, total } = rounds ? progress(rounds) : { done: 0, total: 0 };
-    const status = !rounds ? 'setup' : t.champion ? 'finished' : 'in_progress';
+  res.json(rows.map(({ run_rounds, run_finished_at, ...t }) => {
+    const { done, total } = run_rounds ? progress(run_rounds) : { done: 0, total: 0 };
+    const status = !run_rounds ? 'setup' : run_finished_at ? 'finished' : 'in_progress';
     return { ...t, status, matches_done: done, matches_total: total };
   }));
 });
@@ -137,36 +153,33 @@ router.get('/:id', async (req, res) => {
   res.json(await loadTournament(pool, id));
 });
 
-// Update. Send name and/or rounds (null resets the bracket).
+// Stats over all runs (finishes count once a run is finished).
+router.get('/:id/stats', async (req, res) => {
+  const id = requireUuid(req.params.id, NOT_FOUND);
+  const { rowCount } = await pool.query('SELECT 1 FROM tournaments WHERE id = $1', [id]);
+  if (!rowCount) throw new HttpError(404, NOT_FOUND);
+  const [{ rows: participants }, { rows: runs }] = await Promise.all([
+    pool.query('SELECT id, name, image, archived FROM participants WHERE tournament_id = $1 ORDER BY position', [id]),
+    pool.query('SELECT rounds, sat_out, finished_at FROM runs WHERE tournament_id = $1 ORDER BY number', [id]),
+  ]);
+  res.json({
+    runs_total: runs.length,
+    runs_finished: runs.filter(r => r.finished_at).length,
+    participants: computeStats(participants, runs),
+  });
+});
+
+// Update (rename). Brackets are changed through /api/runs.
 router.patch('/:id', async (req, res) => {
   const id = requireUuid(req.params.id, NOT_FOUND);
   const body = req.body ?? {};
-  if (body.name === undefined && body.rounds === undefined) {
-    throw new HttpError(400, 'Nothing to update: send name and/or rounds');
-  }
-
-  await withTransaction(async client => {
-    const { rows } = await client.query('SELECT id FROM tournaments WHERE id = $1 FOR UPDATE', [id]);
-    if (!rows[0]) throw new HttpError(404, NOT_FOUND);
-
-    const sets = ['updated_at = now()'];
-    const values = [id];
-    if (body.name !== undefined) {
-      values.push(cleanName(body.name));
-      sets.push(`name = $${values.length}`);
-    }
-    if (body.rounds !== undefined) {
-      let rounds = null;
-      if (body.rounds !== null) {
-        const { rows: ps } = await client.query('SELECT id FROM participants WHERE tournament_id = $1', [id]);
-        rounds = JSON.stringify(cleanRounds(body.rounds, ps.map(p => p.id)));
-      }
-      values.push(rounds);
-      sets.push(`rounds = $${values.length}::jsonb`);
-    }
-    await client.query(`UPDATE tournaments SET ${sets.join(', ')} WHERE id = $1`, values);
-  });
-
+  if (body.rounds !== undefined) throw new HttpError(400, 'Brackets are now runs: use /api/runs');
+  if (body.name === undefined) throw new HttpError(400, 'Nothing to update: send name');
+  const { rowCount } = await pool.query(
+    'UPDATE tournaments SET name = $2, updated_at = now() WHERE id = $1',
+    [id, cleanName(body.name)]
+  );
+  if (!rowCount) throw new HttpError(404, NOT_FOUND);
   res.json(await loadTournament(pool, id));
 });
 

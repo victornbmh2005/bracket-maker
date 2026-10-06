@@ -5,8 +5,13 @@ const $modal = document.getElementById('modal');
 const $toast = document.getElementById('toast');
 
 // ---------- State ----------
-let view = { screen: 'loading', match: null };   // screen: loading | home | tournament | error
-let current = null;     // the open tournament: {id, name, rounds, participants: [...]}
+let view = { screen: 'loading', match: null, picker: null };   // screen: loading | home | tournament | error
+let current = null;     // the open tournament: {id, name, participants, latest_run, run_count}
+let tab = 'participants';   // participants | bracket | stats | history
+let stats = null;       // GET /tournaments/:id/stats, loaded on the Stats tab
+let statsSort = null;   // [column, 'asc' | 'desc'], or null for the server's order
+let history = null;     // GET /runs?tournament_id=, loaded on the History tab
+let historyRun = null;  // a past run opened in the History tab
 let summaries = [];     // home page list
 let errorMessage = '';
 let editingId = null;   // participant being edited in setup
@@ -138,36 +143,8 @@ function toast(message, isError = false) {
 }
 
 // ---------- Bracket logic ----------
-// These work on any object with {participants, rounds}. The app runs them on
-// a copy, sends the new rounds to the server, and keeps what the server returns.
-function buildRounds(t, shuffle) {
-  const ids = t.participants.map(p => p.id);
-  if (shuffle) {
-    for (let i = ids.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [ids[i], ids[j]] = [ids[j], ids[i]];
-    }
-  }
-  let size = 2;
-  while (size < ids.length) size *= 2;
-  const firstCount = size / 2;
-  const byes = size - ids.length;
-  // Spread byes evenly so no first-round match has two of them
-  const byeAt = new Set();
-  for (let j = 0; j < byes; j++) byeAt.add(Math.floor(j * firstCount / byes));
-
-  const first = [];
-  let k = 0;
-  for (let i = 0; i < firstCount; i++) {
-    if (byeAt.has(i)) first.push({ a: ids[k++], b: null, winner: null });
-    else first.push({ a: ids[k++], b: ids[k++], winner: null });
-  }
-  t.rounds = [first];
-  for (let n = firstCount / 2; n >= 1; n /= 2) {
-    t.rounds.push(Array.from({ length: n }, () => ({ a: null, b: null, winner: null })));
-  }
-  first.forEach((m, i) => { if (m.b === null) advance(t, 0, i, m.a); });
-}
+// The server builds each run's bracket. Picks are made here on a copy of the
+// run's rounds, sent with PATCH /api/runs/:id, and the server's answer is kept.
 
 // Put `val` into the next-round slot fed by match (r, i). If that changes a
 // match that already had a result, clear it and keep clearing down the line.
@@ -193,28 +170,40 @@ function undo(t, r, i) {
   feedNext(t, r, i, null);
 }
 
-const champion = t => t.rounds ? t.rounds[t.rounds.length - 1][0].winner : null;
-function roundName(t, r) {
-  const fromEnd = t.rounds.length - 1 - r;
+const champion = run => run.rounds[run.rounds.length - 1][0].winner;
+const hasPlayIn = run => run.rounds.length > 1 && run.rounds[0].some(m => m.a === null || m.b === null);
+const isOneSided = m => m.a === null || m.b === null;
+function roundName(run, r) {
+  if (r === 0 && hasPlayIn(run)) return 'Play-in';
+  const fromEnd = run.rounds.length - 1 - r;
   if (fromEnd === 0) return 'Final';
   if (fromEnd === 1) return 'Semifinals';
   if (fromEnd === 2) return 'Quarterfinals';
-  return 'Round of ' + t.rounds[r].length * 2;
+  return 'Round of ' + run.rounds[r].length * 2;
 }
-function counts(t) {
+function counts(run) {
   let done = 0, total = 0;
-  t.rounds.forEach((round, r) => round.forEach(m => {
-    if (r === 0 && m.b === null) return;  // byes aren't real matches
+  run.rounds.forEach((round, r) => round.forEach(m => {
+    if (r === 0 && isOneSided(m)) return;   // straight through, not a real match
     total++;
     if (m.winner !== null) done++;
   }));
   return { done, total };
 }
-function summaryStatus(s) {
-  if (s.status === 'setup') return 'Setting up';
-  if (s.champion) return 'Winner: ' + esc(s.champion.name);
-  return `In progress · ${s.matches_done}/${s.matches_total} matches`;
+function runLabel(run) {
+  const size = run.rounds[0].length * 2;
+  if (run.mode === 'cut') return `Cut to ${size} · ${run.sat_out.length} sat out`;
+  return hasPlayIn(run) ? 'Everyone plays · with play-in' : 'Everyone plays';
 }
+function summaryStatus(s) {
+  const runs = s.run_count > 1 ? ` · ${s.run_count} runs` : '';
+  if (s.status === 'setup') return 'Setting up';
+  if (s.status === 'finished') return `Run #${s.run_number} winner: ${esc(s.champion?.name ?? '?')}${runs}`;
+  return `Run #${s.run_number} in progress · ${s.matches_done}/${s.matches_total} matches${runs}`;
+}
+
+const activeOf = t => t.participants.filter(p => !p.archived);
+const inProgress = t => Boolean(t.latest_run && !t.latest_run.finished_at);
 
 // ---------- Saving to the server ----------
 // Runs one server action at a time. On failure: show the error, reload the
@@ -238,22 +227,31 @@ async function run(task) {
 }
 
 async function saveRounds(rounds) {
-  current = await api.updateTournament(current.id, { rounds });
+  const wasFinished = Boolean(current.latest_run.finished_at);
+  current.latest_run = await api.updateRun(current.latest_run.id, { rounds });
   view.match = null;
   render();
+  const champ = current.latest_run.champion_id;
+  if (champ && !wasFinished) toast(`🏆 ${person(current, champ).name} wins run #${current.latest_run.number}!`);
 }
 
-// ---------- Routing: #/ = home, #/t/<id> = a tournament ----------
+// ---------- Routing ----------
+// #/ = home, #/t/<id> = a tournament, #/t/<id>/<tab> = one of its tabs
+const TABS = ['participants', 'bracket', 'stats', 'history'];
+
 async function route() {
   view.match = null;
+  view.picker = null;
   editingId = null;
   formImage = null;
-  const m = location.hash.match(/^#\/t\/([0-9a-f-]{36})$/i);
-  if (m) await openTournament(m[1]);
+  const m = location.hash.match(/^#\/t\/([0-9a-f-]{36})(?:\/(\w+))?$/i);
+  if (m) await openTournament(m[1], TABS.includes(m[2]) ? m[2] : null);
   else await loadHome();
   window.scrollTo(0, 0);
 }
 window.addEventListener('hashchange', route);
+
+const tabLink = (tab, t = current) => `#/t/${t.id}/${tab}`;
 
 async function checkHealth() {
   try {
@@ -285,8 +283,9 @@ async function loadHome() {
   render();
 }
 
-async function openTournament(id) {
-  if (!current || current.id !== id) {
+async function openTournament(id, requestedTab) {
+  const switching = !current || current.id !== id;
+  if (switching) {
     view.screen = 'loading';
     render();
     try {
@@ -298,10 +297,28 @@ async function openTournament(id) {
       render();
       return;
     }
+    stats = null;
+    history = null;
   }
+  historyRun = null;
   addMine(id);
+  tab = requestedTab || (current.latest_run ? 'bracket' : 'participants');
   view.screen = 'tournament';
   render();
+
+  // Tabs whose data is loaded separately
+  try {
+    if (tab === 'stats') {
+      stats = await api.tournamentStats(id);
+      if (tab === 'stats') render();
+    }
+    if (tab === 'history') {
+      history = await api.listRuns(id);
+      if (tab === 'history') render();
+    }
+  } catch (err) {
+    toast(err.message, true);
+  }
 }
 
 // ---------- Rendering ----------
@@ -309,8 +326,7 @@ function render() {
   if (view.screen === 'loading') renderMessage('<p>Loading…</p>');
   else if (view.screen === 'error') renderError();
   else if (view.screen === 'home') renderHome();
-  else if (current.rounds) renderBracket(current);
-  else renderSetup(current);
+  else renderTournament(current);
   renderModal();
 }
 
@@ -367,9 +383,16 @@ function renderHome() {
       </div>`}`;
 }
 
-function renderSetup(t) {
-  const editing = editingId ? person(t, editingId) : null;
-  const imageUrl = editing && editing.image && !editing.image.startsWith('data:') ? editing.image : '';
+// The tournament screen: header, tabs, then the chosen tab.
+function renderTournament(t) {
+  const lr = t.latest_run;
+  const tabs = [
+    ['participants', `Participants <span class="count">${activeOf(t).length}</span>`],
+    ['bracket', lr ? `Bracket <span class="count">#${lr.number}</span>` : 'Bracket'],
+    ['stats', 'Stats'],
+    ['history', `History <span class="count">${t.run_count}</span>`],
+  ];
+  const body = { participants: participantsTab, bracket: bracketTab, stats: statsTab, history: historyTab }[tab](t);
   $app.innerHTML = `
     <header class="top">
       <div class="row">
@@ -381,8 +404,43 @@ function renderSetup(t) {
         <button class="btn ghost danger" data-action="delete-current">Delete</button>
       </div>
     </header>
+    <nav class="tabs">
+      ${tabs.map(([key, label]) => `<a class="tab ${tab === key ? 'active' : ''}" href="${tabLink(key, t)}">${label}</a>`).join('')}
+    </nav>
+    ${body}`;
+
+  if (tab === 'participants') {
+    if (editingId) {
+      const editing = person(t, editingId);
+      if (editing && editing.image && editing.image.startsWith('data:') && formImage === null) formImage = editing.image;
+    }
+    updatePreview();
+  }
+  if (selectTitle) {
+    selectTitle = false;
+    document.getElementById('title').select();
+  }
+}
+
+function startButton(t, label) {
+  const n = activeOf(t).length;
+  return `<button class="btn primary" data-action="start" ${n < 2 ? 'disabled title="Add at least 2 participants"' : ''}>${label}</button>`;
+}
+
+function participantsTab(t) {
+  const people = activeOf(t);
+  const locked = inProgress(t);
+  const editing = editingId ? person(t, editingId) : null;
+  const imageUrl = editing && editing.image && !editing.image.startsWith('data:') ? editing.image : '';
+  const nextRun = (t.latest_run?.number ?? 0) + 1;
+  return `
+    ${locked ? `
+      <div class="notice">
+        <span>Run #${t.latest_run.number} is in progress, so participants are locked until it's finished.</span>
+        <a class="btn small primary" href="${tabLink('bracket', t)}">Go to bracket →</a>
+      </div>` : ''}
     <div class="setup">
-      <div class="side">
+      <fieldset class="side" ${locked ? 'disabled' : ''}>
       <form class="panel" id="pform" autocomplete="off">
         <h2>${editing ? 'Edit participant' : 'Add participant'}</h2>
         <label class="field">Name
@@ -425,25 +483,23 @@ function renderSetup(t) {
         <p class="muted hint" id="spcount"></p>
         <button class="btn primary">Import songs</button>
       </form>
-      </div>
+      </fieldset>
       <section>
         <div class="startbar">
           <div class="row">
-            <span class="muted">${t.participants.length} participant${t.participants.length === 1 ? '' : 's'}</span>
+            <span class="muted">${people.length} participant${people.length === 1 ? '' : 's'}</span>
             <button class="btn small ghost" data-action="refresh-p" title="Reload participants from the server">↻ Refresh</button>
           </div>
-          <div class="row">
-            <label><input type="checkbox" id="shuffle" checked> Shuffle seeding</label>
-            <button class="btn primary" data-action="start" ${t.participants.length < 2 ? 'disabled' : ''}>Start tournament →</button>
-          </div>
+          ${locked ? '' : startButton(t, `Start run #${nextRun} →`)}
         </div>
-        ${t.participants.length ? `<div class="grid">${t.participants.map((p, i, all) => `
+        ${people.length ? `<div class="grid">${people.map((p, i, all) => `
           <div class="pcard ${p.id === editingId ? 'editing' : ''}">
             <span class="seed">#${i + 1}</span>
             ${imgTag(p, 'cover')}
             <div class="meta">
               <span class="name">${esc(p.name)}</span>
               ${p.link ? `<span class="tag">${linkKind(p.link)}</span>` : ''}
+              ${locked ? '' : `
               <div class="row" style="margin-top:auto">
                 <button class="btn small" data-action="edit-p" data-id="${p.id}">Edit</button>
                 <button class="btn small ghost danger" data-action="remove-p" data-id="${p.id}">Remove</button>
@@ -451,19 +507,12 @@ function renderSetup(t) {
               <div class="row">
                 <button class="btn small ghost" data-action="move-p" data-id="${p.id}" data-dir="-1" ${i === 0 ? 'disabled' : ''} title="Move earlier">←</button>
                 <button class="btn small ghost" data-action="move-p" data-id="${p.id}" data-dir="1" ${i === all.length - 1 ? 'disabled' : ''} title="Move later">→</button>
-              </div>
+              </div>`}
             </div>
           </div>`).join('')}</div>`
         : `<div class="empty-state"><p class="muted">Add at least 2 participants to start.</p></div>`}
       </section>
     </div>`;
-
-  if (editing && editing.image && editing.image.startsWith('data:') && formImage === null) formImage = editing.image;
-  updatePreview();
-  if (selectTitle) {
-    selectTitle = false;
-    document.getElementById('title').select();
-  }
 }
 
 function updatePreview() {
@@ -482,44 +531,157 @@ function slotHtml(t, pid, m, emptyLabel) {
   return `<div class="slot ${cls}">${imgTag(p, 'thumb')}<span class="nm">${esc(p.name)}</span></div>`;
 }
 
-function renderBracket(t) {
-  const champ = champion(t);
-  const { done, total } = counts(t);
-  $app.innerHTML = `
-    <header class="top">
-      <div class="row">
-        <button class="btn ghost" data-action="home">← All</button>
-        <h1 class="title">${esc(t.name)}</h1>
-      </div>
-      <div class="row">
-        <button class="btn ghost" data-action="copy-link">Copy link</button>
-        <button class="btn ghost danger" data-action="reset">Reset bracket</button>
-        <button class="btn ghost danger" data-action="delete-current">Delete</button>
-      </div>
-    </header>
-    <p class="progress">${done} of ${total} matches decided. Click a highlighted match to pick a winner.</p>
-    ${champ ? (p => `
-      <div class="champion">
-        ${imgTag(p, 'big')}
-        <div><small>🏆 Champion</small><h2>${esc(p.name)}</h2></div>
-      </div>`)(person(t, champ)) : ''}
+// The bracket drawing. readOnly: no clicking (history view).
+function bracketHtml(t, runData, readOnly) {
+  const playIn = hasPlayIn(runData);
+  return `
     <div class="bracket">
-      ${t.rounds.map((round, r) => `
+      ${runData.rounds.map((round, r) => `
         <div class="round">
-          <h3>${roundName(t, r)}</h3>
+          <h3>${roundName(runData, r)}</h3>
           <div class="matches">
             ${round.map((m, i) => {
-              const playable = m.a !== null && m.b !== null;
+              // Straight through the play-in: keep the space so rounds line up, but don't draw it
+              if (r === 0 && playIn && isOneSided(m)) return '<div class="match through" aria-hidden="true"></div>';
+              const playable = !readOnly && m.a !== null && m.b !== null;
               const pending = playable && m.winner === null;
               return `<button class="match ${playable ? 'playable' : ''} ${pending ? 'pending' : ''}"
                         data-action="open-match" data-r="${r}" data-i="${i}" ${playable ? '' : 'disabled'}>
                 ${slotHtml(t, m.a, m, 'TBD')}
-                ${slotHtml(t, m.b, m, r === 0 ? 'Bye' : 'TBD')}
+                ${slotHtml(t, m.b, m, 'TBD')}
               </button>`;
             }).join('')}
           </div>
         </div>`).join('')}
     </div>`;
+}
+
+function satOutHtml(t, runData) {
+  if (!runData.sat_out.length) return '';
+  return `
+    <div class="satout">
+      <span class="muted">Sat out this run:</span>
+      ${runData.sat_out.map(id => {
+        const p = person(t, id);
+        return p ? `<span class="chip">${imgTag(p, 'thumb')}${esc(p.name)}</span>` : '';
+      }).join('')}
+    </div>`;
+}
+
+function championHtml(t, runData) {
+  const champ = champion(runData);
+  if (!champ) return '';
+  const p = person(t, champ);
+  return `
+    <div class="champion">
+      ${imgTag(p, 'big')}
+      <div><small>🏆 Champion of run #${runData.number}</small><h2>${esc(p.name)}</h2></div>
+    </div>`;
+}
+
+function bracketTab(t) {
+  const lr = t.latest_run;
+  if (!lr) {
+    return `
+      <div class="empty-state">
+        <p><strong>No runs yet.</strong></p>
+        <p class="muted">Add participants, then start a run. You can play the same tournament many times and compare stats.</p>
+        <div class="row" style="justify-content:center;margin-top:12px">${startButton(t, 'Start run #1 →')}</div>
+      </div>`;
+  }
+  const { done, total } = counts(lr);
+  const finished = Boolean(lr.finished_at);
+  return `
+    <div class="runbar">
+      <div>
+        <strong>Run #${lr.number}</strong> <span class="muted">· ${runLabel(lr)}</span>
+        <div class="muted small">${finished ? 'Finished.' : `${done} of ${total} matches decided. Click a highlighted match to pick a winner.`}</div>
+      </div>
+      <div class="row">
+        ${finished ? `${startButton(t, `Run again →`)} <a class="btn ghost" href="${tabLink('stats', t)}">See stats</a>` : ''}
+        <button class="btn ghost danger" data-action="delete-run" data-id="${lr.id}">Delete this run</button>
+      </div>
+    </div>
+    ${championHtml(t, lr)}
+    ${satOutHtml(t, lr)}
+    ${bracketHtml(t, lr, false)}`;
+}
+
+const STAT_COLUMNS = [
+  ['name', 'Participant', 'asc'],
+  ['titles', 'Titles', 'desc'],
+  ['win_rate', 'Win rate', 'desc'],
+  ['wins', 'W–L', 'desc'],
+  ['best_finish_rank', 'Best finish', 'asc'],
+  ['avg_wins', 'Wins / run', 'desc'],
+  ['runs_played', 'Played', 'desc'],
+  ['sat_out', 'Sat out', 'desc'],
+];
+
+function statsTab(t) {
+  if (!stats) return '<div class="message"><p>Loading stats…</p></div>';
+  if (!stats.runs_total) {
+    return `<div class="empty-state"><p><strong>No stats yet.</strong></p><p class="muted">Play a run to see titles, win rates and best finishes.</p></div>`;
+  }
+  let rows = [...stats.participants];
+  if (statsSort) {
+    const [key, dir] = statsSort;
+    const val = s => s[key] ?? (dir === 'asc' ? Infinity : -Infinity);
+    rows.sort((x, y) => {
+      const a = val(x), b = val(y);
+      const c = typeof a === 'string' ? a.localeCompare(b) : a - b;
+      return dir === 'asc' ? c : -c;
+    });
+  }
+  const sortMark = key => statsSort && statsSort[0] === key ? (statsSort[1] === 'asc' ? ' ▲' : ' ▼') : '';
+  return `
+    <p class="muted">${stats.runs_finished} finished run${stats.runs_finished === 1 ? '' : 's'}${stats.runs_total > stats.runs_finished ? ' (plus one in progress: its wins count, its finishes don\'t yet)' : ''}. Click a column to sort.</p>
+    <div class="table-wrap">
+      <table class="stats">
+        <thead><tr>
+          <th>#</th>
+          ${STAT_COLUMNS.map(([key, label, dir]) => `<th data-action="sort" data-key="${key}" data-dir="${dir}">${label}${sortMark(key)}</th>`).join('')}
+        </tr></thead>
+        <tbody>
+          ${rows.map((s, i) => `
+            <tr class="${s.archived ? 'archived' : ''}">
+              <td class="muted">${i + 1}</td>
+              <td><span class="who">${imgTag(s, 'thumb')}${esc(s.name)}${s.archived ? ' <span class="tag">removed</span>' : ''}</span></td>
+              <td>${s.titles ? `🏆 ${s.titles}` : '–'}</td>
+              <td>${s.win_rate === null ? '–' : s.win_rate + '%'}</td>
+              <td>${s.wins}–${s.losses}</td>
+              <td>${s.best_finish ?? '–'}</td>
+              <td>${s.avg_wins}</td>
+              <td>${s.runs_played}</td>
+              <td>${s.sat_out}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function historyTab(t) {
+  if (!history) return '<div class="message"><p>Loading history…</p></div>';
+  if (!history.length) return `<div class="empty-state"><p class="muted">No runs yet.</p></div>`;
+  return `
+    <div class="history">
+      ${history.map(h => `
+        <div class="hrow ${historyRun?.id === h.id ? 'open' : ''}">
+          <strong>Run #${h.number}</strong>
+          <span class="muted">${h.mode === 'cut' ? `Cut to ${h.size} · ${h.sat_out_count} sat out` : 'Everyone plays'}</span>
+          <span class="muted">${new Date(h.created_at).toLocaleDateString()}</span>
+          <span class="hchamp">${h.champion ? `${imgTag(h.champion, 'thumb')} 🏆 ${esc(h.champion.name)}` : '<span class="muted">In progress</span>'}</span>
+          <div class="row">
+            <button class="btn small" data-action="view-run" data-id="${h.id}">${historyRun?.id === h.id ? 'Hide' : 'View'}</button>
+            <button class="btn small ghost danger" data-action="delete-run" data-id="${h.id}">Delete</button>
+          </div>
+        </div>`).join('')}
+    </div>
+    ${historyRun ? `
+      <h3 class="section-title">Run #${historyRun.number} · ${runLabel(historyRun)}</h3>
+      ${championHtml(t, historyRun)}
+      ${satOutHtml(t, historyRun)}
+      ${bracketHtml(t, historyRun, true)}` : ''}`;
 }
 
 function contenderHtml(t, pid, m) {
@@ -537,33 +699,72 @@ function contenderHtml(t, pid, m) {
     </div>`;
 }
 
+// The modal is either a matchup (view.match) or the bracket size picker (view.picker).
 function renderModal() {
-  if (!view.match || view.screen !== 'tournament' || !current.rounds) {
+  if (view.screen !== 'tournament' || (!view.match && !view.picker)) {
     $modal.hidden = true;
     $modal.innerHTML = '';
     return;
   }
-  const t = current;
+  $modal.innerHTML = view.picker ? pickerHtml() : matchHtml();
+  $modal.hidden = false;
+}
+
+function matchHtml() {
+  const lr = current.latest_run;
   const { r, i } = view.match;
-  const m = t.rounds[r][i];
-  $modal.innerHTML = `
+  const m = lr.rounds[r][i];
+  return `
     <div class="sheet" role="dialog" aria-modal="true">
       <div class="sheet-head">
-        <h2>${roundName(t, r)}${t.rounds[r].length > 1 ? ` · Match ${i + 1}` : ''}</h2>
+        <h2>${roundName(lr, r)}${lr.rounds[r].length > 1 ? ` · Match ${i + 1}` : ''}</h2>
         <button class="btn ghost" data-action="close">Close ✕</button>
       </div>
       <div class="versus">
-        ${contenderHtml(t, m.a, m)}
+        ${contenderHtml(current, m.a, m)}
         <div class="vs">VS</div>
-        ${contenderHtml(t, m.b, m)}
+        ${contenderHtml(current, m.b, m)}
       </div>
       ${m.winner !== null ? '<div class="sheet-foot"><button class="btn ghost" data-action="undo">Undo pick</button></div>' : ''}
     </div>`;
-  $modal.hidden = false;
+}
+
+function pickerHtml() {
+  const n = activeOf(current).length;
+  const options = view.picker.options;
+  const describe = o => {
+    if (o.mode === 'cut') return `<strong>${o.size} play</strong> · ${o.sit_out} sit out at random`;
+    if (o.play_in) {
+      const playIn = n - o.size / 2;   // matches in the play-in round
+      return `<strong>Everyone plays</strong> · ${playIn} play-in match${playIn === 1 ? '' : 'es'} first, ${n - playIn * 2} go straight through`;
+    }
+    return `<strong>Everyone plays</strong> · ${o.size}-player bracket`;
+  };
+  return `
+    <div class="sheet picker" role="dialog" aria-modal="true">
+      <div class="sheet-head">
+        <h2>Start run #${(current.latest_run?.number ?? 0) + 1}</h2>
+        <button class="btn ghost" data-action="close">Close ✕</button>
+      </div>
+      <p class="muted">${n} participants. Pick the bracket size:</p>
+      <form id="startform">
+        ${options.map((o, i) => `
+          <label class="option">
+            <input type="radio" name="size" value="${o.size}" ${i === view.picker.preselect ? 'checked' : ''}>
+            <span>${describe(o)}</span>
+          </label>`).join('')}
+        ${options.some(o => o.mode === 'cut') ? '<p class="muted hint">Who sits out is random, but anyone who sat out before gets to play first.</p>' : ''}
+        <label class="option plain"><input type="checkbox" name="shuffle" checked> Shuffle seeding (off = participant order)</label>
+        <div class="row" style="justify-content:flex-end">
+          <button class="btn primary">Start run →</button>
+        </div>
+      </form>
+    </div>`;
 }
 
 function closeModal() {
   view.match = null;
+  view.picker = null;
   renderModal();
 }
 
@@ -610,14 +811,36 @@ function deleteTournament(id, name) {
   });
 }
 
+function deleteRun(id) {
+  const number = history?.find(h => h.id === id)?.number ?? current.latest_run?.number;
+  if (!confirm(`Delete run #${number}? Its results will be removed from the stats. This can't be undone.`)) return;
+  run(async () => {
+    await api.deleteRun(id);
+    current = await api.getTournament(current.id);
+    if (historyRun?.id === id) historyRun = null;
+    if (tab === 'history') history = await api.listRuns(current.id);
+    stats = null;
+    render();
+    toast(`Deleted run #${number}.`);
+  });
+}
+
 async function copyLink() {
-  const url = location.href;
+  const url = `${location.origin}${location.pathname}#/t/${current.id}`;
   try {
     await navigator.clipboard.writeText(url);
     toast('Link copied. Anyone with it can view and play this tournament.');
   } catch (e) {
     prompt('Copy this link:', url);
   }
+}
+
+// Saves position = index for every active participant whose position changed.
+async function saveOrder(order) {
+  const changed = order.filter((p, k) => p.position !== k);
+  const updated = await Promise.all(changed.map(p => api.updateParticipant(p.id, { position: order.indexOf(p) })));
+  const byId = new Map(updated.map(u => [u.id, u]));
+  current.participants = [...order.map(p => byId.get(p.id) || p), ...current.participants.filter(p => p.archived)];
 }
 
 document.addEventListener('click', e => {
@@ -628,8 +851,10 @@ document.addEventListener('click', e => {
     case 'new':
       run(async () => {
         current = await api.createTournament({ name: 'Untitled tournament' });
+        stats = null;
+        history = null;
         selectTitle = true;
-        location.hash = '#/t/' + current.id;
+        location.hash = tabLink('participants');
       });
       break;
     case 'open':
@@ -676,25 +901,21 @@ document.addEventListener('click', e => {
     }
     case 'refresh-p':
       run(async () => {
-        current.participants = await api.listParticipants(current.id);
-        if (editingId && !person(current, editingId)) { editingId = null; formImage = null; }
+        current.participants = await api.listParticipants(current.id, true);
+        if (editingId && !activeOf(current).some(p => p.id === editingId)) { editingId = null; formImage = null; }
         render();
         toast('Participants reloaded from the server.');
       });
       break;
     case 'move-p': {
-      const list = current.participants;
+      const list = activeOf(current);
       const i = list.findIndex(p => p.id === el.dataset.id);
       const j = i + Number(el.dataset.dir);
       if (i < 0 || j < 0 || j >= list.length) break;
       const order = [...list];
       [order[i], order[j]] = [order[j], order[i]];
       run(async () => {
-        // Save position = index for every participant whose position changed
-        const changed = order.filter((p, k) => p.position !== k);
-        const updated = await Promise.all(changed.map(p => api.updateParticipant(p.id, { position: order.indexOf(p) })));
-        const byId = new Map(updated.map(u => [u.id, u]));
-        current.participants = order.map(p => byId.get(p.id) || p);
+        await saveOrder(order);
         render();
       });
       break;
@@ -708,8 +929,10 @@ document.addEventListener('click', e => {
       const id = el.dataset.id;
       run(async () => {
         await api.deleteParticipant(id);
-        current.participants = current.participants.filter(p => p.id !== id);
+        // Someone who played in a run is archived (kept for history), so reload
+        current.participants = await api.listParticipants(current.id, true);
         if (editingId === id) { editingId = null; formImage = null; }
+        stats = null;
         render();
       });
       break;
@@ -720,29 +943,52 @@ document.addEventListener('click', e => {
       document.getElementById('file').value = '';
       updatePreview();
       break;
-    case 'start': {
-      const draft = { participants: current.participants, rounds: null };
-      buildRounds(draft, document.getElementById('shuffle').checked);
-      run(() => saveRounds(draft.rounds));
+    case 'start':
+      run(async () => {
+        const options = await api.runOptions(current.id);
+        if (!options.length) throw new Error('Add at least 2 participants first.');
+        // Preselect "everyone plays" when it needs no play-in, otherwise the biggest cut
+        const preselect = options[0].play_in && options[1] ? 1 : 0;
+        view.picker = { options, preselect };
+        renderModal();
+      });
+      break;
+    case 'delete-run':
+      deleteRun(el.dataset.id);
+      break;
+    case 'view-run': {
+      const id = el.dataset.id;
+      if (historyRun?.id === id) {
+        historyRun = null;
+        render();
+        break;
+      }
+      run(async () => {
+        historyRun = await api.getRun(id);
+        render();
+      });
       break;
     }
-    case 'reset':
-      if (confirm('Reset the bracket? All picks will be lost, but the participants are kept.')) {
-        run(() => saveRounds(null));
-      }
+    case 'sort': {
+      const key = el.dataset.key;
+      statsSort = statsSort && statsSort[0] === key
+        ? [key, statsSort[1] === 'asc' ? 'desc' : 'asc']
+        : [key, el.dataset.dir];
+      render();
       break;
+    }
     case 'open-match':
       view.match = { r: +el.dataset.r, i: +el.dataset.i };
       renderModal();
       break;
     case 'pick': {
-      const draft = { rounds: structuredClone(current.rounds) };
+      const draft = { rounds: structuredClone(current.latest_run.rounds) };
       advance(draft, view.match.r, view.match.i, el.dataset.pid);
       run(() => saveRounds(draft.rounds));
       break;
     }
     case 'undo': {
-      const draft = { rounds: structuredClone(current.rounds) };
+      const draft = { rounds: structuredClone(current.latest_run.rounds) };
       undo(draft, view.match.r, view.match.i);
       run(() => saveRounds(draft.rounds));
       break;
@@ -754,14 +1000,15 @@ document.addEventListener('click', e => {
 });
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && view.match) closeModal();
+  if (e.key === 'Escape' && (view.match || view.picker)) closeModal();
 });
 
 document.addEventListener('change', async e => {
   if (e.target.id === 'title') {
     const name = e.target.value.trim() || 'Untitled tournament';
     run(async () => {
-      current = await api.updateTournament(current.id, { name });
+      const renamed = await api.updateTournament(current.id, { name });
+      current.name = renamed.name;
       e.target.value = current.name;
     });
   }
@@ -833,6 +1080,23 @@ document.addEventListener('submit', e => {
     const links = e.target.elements.splinks.value;
     if (!countSpotifyTracks(links)) return toast('No Spotify track links found in that text.', true);
     runImport(e.target, () => api.importSpotify({ tournament_id: current.id, links }), 'song');
+  }
+  // Start a run (POST /api/runs)
+  if (e.target.id === 'startform') {
+    e.preventDefault();
+    const f = e.target.elements;
+    const size = Number(f.size.value);
+    if (!size) return toast('Pick a bracket size.', true);
+    run(async () => {
+      const newRun = await api.createRun({ tournament_id: current.id, size, shuffle: f.shuffle.checked });
+      current.latest_run = newRun;
+      current.run_count += 1;
+      stats = null;
+      history = null;
+      view.picker = null;
+      if (location.hash === tabLink('bracket')) render();
+      else location.hash = tabLink('bracket');
+    });
   }
 });
 

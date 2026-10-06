@@ -1,4 +1,4 @@
--- Bracket Maker database schema. Safe to run more than once (npm run migrate).
+-- 001: the original tables. Safe to run on a database that already has them.
 
 CREATE TABLE IF NOT EXISTS tournaments (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),

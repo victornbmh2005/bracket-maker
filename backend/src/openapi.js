@@ -13,15 +13,17 @@ export default {
     title: 'Bracket Maker API',
     version: '1.0.0',
     description:
-      'CRUD for **tournaments** and **participants**.\n\n' +
-      'Typical flow: create a tournament → copy its `id` → create participants with that `tournament_id` → ' +
-      'start the bracket by PATCHing `rounds` on the tournament.\n\n' +
-      'Participants are locked (409) while a bracket is running. PATCH `rounds: null` to reset it.',
+      'CRUD for **tournaments**, **participants** and **runs**.\n\n' +
+      'Typical flow: create a tournament → copy its `id` → add participants with that `tournament_id` → ' +
+      'GET /api/runs/options to see the bracket sizes → POST /api/runs to start a run → PATCH the run with picks. ' +
+      'When a run is finished you can start another; stats add up across runs (GET /api/tournaments/{id}/stats).\n\n' +
+      'Participants are locked (409) while a run is in progress. Finish or delete the run to change them.',
   },
   servers: [{ url: '/', description: 'This server' }],
   tags: [
     { name: 'Tournaments', description: 'The tournaments table' },
     { name: 'Participants', description: 'The participants table' },
+    { name: 'Runs', description: 'The runs table: each run is one bracket of a tournament' },
     { name: 'Health' },
   ],
 
@@ -40,7 +42,7 @@ export default {
         summary: 'Create a tournament',
         description:
           'Send just `name` for an empty tournament. ' +
-          'Sending `participants` (and optionally `rounds` using their old ids) imports a whole tournament at once.',
+          'Sending `participants` (and optionally `rounds` using their old ids) imports a whole tournament at once; the bracket becomes run #1.',
         requestBody: {
           required: true,
           ...json(ref('TournamentCreate')),
@@ -65,15 +67,13 @@ export default {
       parameters: [idParam('Tournament id')],
       get: {
         tags: ['Tournaments'],
-        summary: 'Get a tournament with its participants',
+        summary: 'Get a tournament with its participants and latest run',
         responses: { 200: { description: 'OK', ...json(ref('TournamentDetail')) }, 404: resp('NotFound') },
       },
       patch: {
         tags: ['Tournaments'],
-        summary: 'Update name and/or rounds',
-        description:
-          '`rounds` must be a full, consistent bracket: round 1 holds every participant exactly once, ' +
-          'and each later match holds the winners of the two matches before it. `rounds: null` resets the bracket.',
+        summary: 'Rename a tournament',
+        description: 'Brackets are changed through /api/runs.',
         requestBody: {
           required: true,
           ...json(ref('TournamentUpdate')),
@@ -86,7 +86,91 @@ export default {
       },
       delete: {
         tags: ['Tournaments'],
-        summary: 'Delete a tournament (and its participants)',
+        summary: 'Delete a tournament (and its participants and runs)',
+        responses: { 204: { description: 'Deleted' }, 404: resp('NotFound') },
+      },
+    },
+
+    '/api/tournaments/{id}/stats': {
+      parameters: [idParam('Tournament id')],
+      get: {
+        tags: ['Tournaments'],
+        summary: 'Participant stats over all runs',
+        description:
+          'Wins and losses count in every run (byes are not wins). Titles and finishes only count once a run is finished. ' +
+          'A finish is measured from the final (Champion, Runner-up, Semifinals…), so runs of different sizes compare fairly. ' +
+          'Sorted by titles, then best finish, then win rate.',
+        responses: { 200: { description: 'OK', ...json(ref('Stats')) }, 404: resp('NotFound') },
+      },
+    },
+
+    '/api/runs': {
+      post: {
+        tags: ['Runs'],
+        summary: 'Start a run (the server builds the bracket)',
+        description:
+          '`size` must be one of the sizes from GET /api/runs/options. A size smaller than the number of participants is a **cut**: ' +
+          'random participants sit out, but those who sat out more often get to play first. ' +
+          'The largest size means **everyone plays**: if the count is not a power of two, round 1 is a play-in round and some go straight through. ' +
+          'Only one run can be in progress at a time (409).',
+        requestBody: { required: true, ...json(ref('RunCreate')) },
+        responses: {
+          201: { description: 'Created', ...json(ref('Run')) },
+          400: resp('BadRequest'),
+          404: resp('NotFound'),
+          409: resp('Conflict'),
+        },
+      },
+      get: {
+        tags: ['Runs'],
+        summary: "List a tournament's runs (newest first, without brackets)",
+        parameters: [{ name: 'tournament_id', in: 'query', required: true, schema: uuid }],
+        responses: {
+          200: { description: 'OK', ...json({ type: 'array', items: ref('RunSummary') }) },
+          400: resp('BadRequest'),
+          404: resp('NotFound'),
+        },
+      },
+    },
+
+    '/api/runs/options': {
+      get: {
+        tags: ['Runs'],
+        summary: 'Bracket sizes available for the current participants',
+        parameters: [{ name: 'tournament_id', in: 'query', required: true, schema: uuid }],
+        responses: {
+          200: { description: 'OK, largest first', ...json({ type: 'array', items: ref('SizeOption') }) },
+          400: resp('BadRequest'),
+          404: resp('NotFound'),
+        },
+      },
+    },
+
+    '/api/runs/{id}': {
+      parameters: [idParam('Run id')],
+      get: {
+        tags: ['Runs'],
+        summary: 'Get a run with its bracket',
+        responses: { 200: { description: 'OK', ...json(ref('Run')) }, 404: resp('NotFound') },
+      },
+      patch: {
+        tags: ['Runs'],
+        summary: 'Save picks',
+        description:
+          'Send the whole `rounds` with winners filled in. The first round matchups must stay the same, and each later match ' +
+          'must hold the winners of the two matches before it. Deciding the final finishes the run; clearing it reopens the run. ' +
+          'Only the latest run can be changed (409).',
+        requestBody: { required: true, ...json({ type: 'object', required: ['rounds'], properties: { rounds: ref('Rounds') } }) },
+        responses: {
+          200: { description: 'Updated', ...json(ref('Run')) },
+          400: resp('BadRequest'),
+          404: resp('NotFound'),
+          409: resp('Conflict'),
+        },
+      },
+      delete: {
+        tags: ['Runs'],
+        summary: 'Delete a run (its results leave the stats)',
         responses: { 204: { description: 'Deleted' }, 404: resp('NotFound') },
       },
     },
@@ -106,7 +190,10 @@ export default {
       get: {
         tags: ['Participants'],
         summary: "List a tournament's participants",
-        parameters: [{ name: 'tournament_id', in: 'query', required: true, schema: uuid }],
+        parameters: [
+          { name: 'tournament_id', in: 'query', required: true, schema: uuid },
+          { name: 'include_archived', in: 'query', description: 'Also return archived participants', schema: { type: 'boolean', default: false } },
+        ],
         responses: {
           200: { description: 'OK, ordered by position', ...json({ type: 'array', items: ref('Participant') }) },
           400: resp('BadRequest'),
@@ -177,6 +264,7 @@ export default {
       delete: {
         tags: ['Participants'],
         summary: 'Delete a participant',
+        description: 'Someone who played in (or sat out of) any run is archived instead, so history and stats keep them.',
         responses: { 204: { description: 'Deleted' }, 404: resp('NotFound'), 409: resp('Conflict') },
       },
     },
@@ -208,6 +296,7 @@ export default {
           image: { type: 'string', description: 'https URL or data:image URL, or empty', example: 'https://picsum.photos/300' },
           link: { type: 'string', description: 'http(s) URL or empty', example: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
           position: { type: 'integer', example: 0 },
+          archived: { type: 'boolean', description: 'Deleted after being in a run; hidden from setup, kept in history' },
           created_at: { type: 'string', format: 'date-time' },
         },
       },
@@ -268,7 +357,6 @@ export default {
         properties: {
           id: uuid,
           name: { type: 'string', example: 'Best movies of the 80s' },
-          rounds: ref('Rounds'),
           created_at: { type: 'string', format: 'date-time' },
           updated_at: { type: 'string', format: 'date-time' },
         },
@@ -276,8 +364,88 @@ export default {
       TournamentDetail: {
         allOf: [
           ref('Tournament'),
-          { type: 'object', properties: { participants: { type: 'array', items: ref('Participant') } } },
+          {
+            type: 'object',
+            properties: {
+              participants: { type: 'array', description: 'Including archived ones', items: ref('Participant') },
+              latest_run: { ...ref('Run'), nullable: true },
+              run_count: { type: 'integer' },
+            },
+          },
         ],
+      },
+      Run: {
+        type: 'object',
+        properties: {
+          id: uuid,
+          tournament_id: uuid,
+          number: { type: 'integer', example: 1 },
+          mode: { type: 'string', enum: ['all', 'cut'], description: 'all = everyone plays, cut = some sat out' },
+          rounds: ref('Rounds'),
+          sat_out: { type: 'array', items: uuid },
+          champion_id: { ...uuid, nullable: true },
+          created_at: { type: 'string', format: 'date-time' },
+          finished_at: { type: 'string', format: 'date-time', nullable: true },
+        },
+      },
+      RunSummary: {
+        type: 'object',
+        properties: {
+          id: uuid,
+          number: { type: 'integer' },
+          mode: { type: 'string', enum: ['all', 'cut'] },
+          size: { type: 'integer' },
+          sat_out_count: { type: 'integer' },
+          champion: { type: 'object', nullable: true, properties: { id: uuid, name: { type: 'string' }, image: { type: 'string' } } },
+          created_at: { type: 'string', format: 'date-time' },
+          finished_at: { type: 'string', format: 'date-time', nullable: true },
+        },
+      },
+      RunCreate: {
+        type: 'object',
+        required: ['tournament_id', 'size'],
+        properties: {
+          tournament_id: uuid,
+          size: { type: 'integer', example: 8 },
+          shuffle: { type: 'boolean', default: true, description: 'Random seeding; false keeps participant order' },
+        },
+      },
+      SizeOption: {
+        type: 'object',
+        properties: {
+          size: { type: 'integer', example: 8 },
+          mode: { type: 'string', enum: ['all', 'cut'] },
+          sit_out: { type: 'integer', description: 'How many sit out with this size' },
+          play_in: { type: 'boolean', description: 'Everyone plays, with a play-in round first' },
+        },
+      },
+      Stats: {
+        type: 'object',
+        properties: {
+          runs_total: { type: 'integer' },
+          runs_finished: { type: 'integer' },
+          participants: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: uuid,
+                name: { type: 'string' },
+                image: { type: 'string' },
+                archived: { type: 'boolean' },
+                runs_played: { type: 'integer' },
+                sat_out: { type: 'integer' },
+                wins: { type: 'integer' },
+                losses: { type: 'integer' },
+                titles: { type: 'integer' },
+                win_rate: { type: 'number', nullable: true, description: 'Percent, e.g. 66.7' },
+                best_finish: { type: 'string', nullable: true, example: 'Semifinals' },
+                best_finish_rank: { type: 'integer', nullable: true, description: '-1 champion, 0 runner-up, 1 semifinals… (lower is better)' },
+                avg_wins: { type: 'number', description: 'Wins per run played' },
+              },
+            },
+          },
+        },
       },
       TournamentSummary: {
         type: 'object',
@@ -295,9 +463,12 @@ export default {
           champion: {
             type: 'object',
             nullable: true,
+            description: 'Champion of the latest run',
             properties: { id: uuid, name: { type: 'string' }, image: { type: 'string' } },
           },
-          status: { type: 'string', enum: ['setup', 'in_progress', 'finished'] },
+          status: { type: 'string', enum: ['setup', 'in_progress', 'finished'], description: 'Of the latest run' },
+          run_count: { type: 'integer' },
+          run_number: { type: 'integer', nullable: true, description: 'Number of the latest run' },
           matches_done: { type: 'integer' },
           matches_total: { type: 'integer' },
         },
@@ -321,9 +492,9 @@ export default {
       },
       TournamentUpdate: {
         type: 'object',
+        required: ['name'],
         properties: {
           name: { type: 'string', maxLength: 80, example: 'Best movies ever' },
-          rounds: ref('Rounds'),
         },
         example: { name: 'Best movies ever' },
       },
@@ -335,7 +506,7 @@ export default {
     responses: {
       BadRequest: { description: 'Invalid input', ...json(ref('Error')) },
       NotFound: { description: 'Not found', ...json(ref('Error')) },
-      Conflict: { description: 'The bracket has already started', ...json(ref('Error')) },
+      Conflict: { description: 'A run is in progress (or the run is not the latest)', ...json(ref('Error')) },
     },
   },
 };

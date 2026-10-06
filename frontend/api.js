@@ -33,10 +33,20 @@ const api = (() => {
     getTournament: id => request('GET', `/tournaments/${enc(id)}`),
     updateTournament: (id, data) => request('PATCH', `/tournaments/${enc(id)}`, data),
     deleteTournament: id => request('DELETE', `/tournaments/${enc(id)}`),
+    tournamentStats: id => request('GET', `/tournaments/${enc(id)}/stats`),
+
+    // Runs (each run is one bracket of a tournament)
+    runOptions: tournamentId => request('GET', '/runs/options?tournament_id=' + enc(tournamentId)),
+    createRun: data => request('POST', '/runs', data),
+    listRuns: tournamentId => request('GET', '/runs?tournament_id=' + enc(tournamentId)),
+    getRun: id => request('GET', `/runs/${enc(id)}`),
+    updateRun: (id, data) => request('PATCH', `/runs/${enc(id)}`, data),
+    deleteRun: id => request('DELETE', `/runs/${enc(id)}`),
 
     // Participants
     createParticipant: data => request('POST', '/participants', data),
-    listParticipants: tournamentId => request('GET', '/participants?tournament_id=' + enc(tournamentId)),
+    listParticipants: (tournamentId, includeArchived = false) =>
+      request('GET', '/participants?tournament_id=' + enc(tournamentId) + (includeArchived ? '&include_archived=true' : '')),
     getParticipant: id => request('GET', `/participants/${enc(id)}`),
     updateParticipant: (id, data) => request('PATCH', `/participants/${enc(id)}`, data),
     deleteParticipant: id => request('DELETE', `/participants/${enc(id)}`),

@@ -23,7 +23,8 @@ test('create, read, update and delete a tournament', async () => {
   const t = await newTournament('CRUD test');
   assert.equal(t.name, 'CRUD test');
   assert.deepEqual(t.participants, []);
-  assert.equal(t.rounds, null);
+  assert.equal(t.latest_run, null);
+  assert.equal(t.run_count, 0);
 
   const read = await call('GET', `/tournaments/${t.id}`);
   assert.equal(read.status, 200);
@@ -66,35 +67,9 @@ test('list returns summaries only for the ids asked for', async () => {
   await call('DELETE', `/tournaments/${b.id}`);
 });
 
-test('a bracket can be played to a champion, validated, and reset', async () => {
-  const t = await newTournament('Bracket');
-  const ids = [];
-  for (const name of ['Alien', 'Heat', 'Up']) {
-    ids.push((await call('POST', '/participants', { tournament_id: t.id, name })).data.id);
-  }
-  const rounds = [
-    [{ a: ids[0], b: null, winner: ids[0] }, { a: ids[1], b: ids[2], winner: null }],
-    [{ a: ids[0], b: null, winner: null }],
-  ];
-  assert.equal((await call('PATCH', `/tournaments/${t.id}`, { rounds })).status, 200);
-
-  rounds[0][1].winner = ids[2];
-  rounds[1][0].b = ids[2];
-  rounds[1][0].winner = ids[2];
-  assert.equal((await call('PATCH', `/tournaments/${t.id}`, { rounds })).status, 200);
-
-  const broken = structuredClone(rounds);
-  broken[1][0].b = ids[1];
-  assert.equal((await call('PATCH', `/tournaments/${t.id}`, { rounds: broken })).status, 400);
-
-  const summary = (await call('GET', `/tournaments?ids=${t.id}`)).data[0];
-  assert.equal(summary.status, 'finished');
-  assert.equal(summary.champion.name, 'Up');
-  assert.equal(summary.matches_done, 2);
-  assert.equal(summary.matches_total, 2);
-
-  const reset = await call('PATCH', `/tournaments/${t.id}`, { rounds: null });
-  assert.equal(reset.data.rounds, null);
+test('brackets are no longer set on the tournament', async () => {
+  const t = await newTournament();
+  assert.equal((await call('PATCH', `/tournaments/${t.id}`, { rounds: null })).status, 400);
   await call('DELETE', `/tournaments/${t.id}`);
 });
 
@@ -106,7 +81,11 @@ test('import creates participants and remaps old ids inside rounds', async () =>
   });
   assert.equal(r.status, 201);
   assert.equal(r.data.participants.length, 2);
-  assert.equal(r.data.rounds[0][0].winner, r.data.participants[1].id);
+  const run = r.data.latest_run;
+  assert.equal(run.number, 1);
+  assert.equal(run.rounds[0][0].winner, r.data.participants[1].id);
+  assert.equal(run.champion_id, r.data.participants[1].id);
+  assert.ok(run.finished_at);
   await call('DELETE', `/tournaments/${r.data.id}`);
 });
 
