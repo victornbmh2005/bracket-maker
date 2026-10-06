@@ -115,7 +115,27 @@ export default {
       },
     },
 
-    '/api/participants/import': {
+    '/api/participants/import/spotify': {
+      post: {
+        tags: ['Participants'],
+        summary: 'Import Spotify tracks from pasted links',
+        description:
+          "Spotify's API no longer lets new apps read playlists, so paste track links instead: in the Spotify desktop app, " +
+          'open a playlist, click a song, press Ctrl+A then Ctrl+C, and paste. Any text works; every ' +
+          '`open.spotify.com/track/…` link or `spotify:track:…` URI in it is used (duplicates once). ' +
+          "Each track's name and cover come from Spotify's public oEmbed endpoint. Names are the song title only (no artist). " +
+          'Stops at 256 participants.',
+        requestBody: { required: true, ...json(ref('SpotifyImport')) },
+        responses: {
+          201: { description: 'Imported', ...json(ref('PlaylistImportResult')) },
+          400: resp('BadRequest'),
+          404: resp('NotFound'),
+          409: resp('Conflict'),
+        },
+      },
+    },
+
+    '/api/participants/import/youtube': {
       post: {
         tags: ['Participants'],
         summary: 'Import a YouTube playlist as participants',
@@ -222,12 +242,24 @@ export default {
           },
         },
       },
+      SpotifyImport: {
+        type: 'object',
+        required: ['tournament_id', 'links'],
+        properties: {
+          tournament_id: uuid,
+          links: {
+            type: 'string',
+            description: 'Text containing Spotify track links, e.g. one per line',
+            example: 'https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC\nhttps://open.spotify.com/track/7ouMYWpwJ422jRcDASZB7P',
+          },
+        },
+      },
       PlaylistImportResult: {
         type: 'object',
         properties: {
-          playlist_title: { type: 'string' },
+          playlist_title: { type: 'string', description: 'YouTube playlist title (empty for Spotify)' },
           added: { type: 'array', items: ref('Participant') },
-          skipped_unavailable: { type: 'integer', description: 'Private or deleted videos that were skipped' },
+          skipped_unavailable: { type: 'integer', description: 'Videos/tracks that were private, deleted or not found' },
           truncated: { type: 'boolean', description: 'true if the playlist had more videos than room left (256 max)' },
         },
       },

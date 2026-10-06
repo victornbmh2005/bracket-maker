@@ -412,6 +412,19 @@ function renderSetup(t) {
         <p class="muted hint">Each video becomes a participant with its title, thumbnail and player. The playlist must be public or unlisted.</p>
         <button class="btn primary">Import videos</button>
       </form>
+      <form class="panel" id="spform" autocomplete="off">
+        <h2>Import Spotify songs</h2>
+        <ol class="muted hint steps">
+          <li>In the Spotify <strong>desktop app</strong>, open any playlist or album.</li>
+          <li>Click one song, press <kbd>Ctrl</kbd>+<kbd>A</kbd>, then <kbd>Ctrl</kbd>+<kbd>C</kbd>.</li>
+          <li>Paste below.</li>
+        </ol>
+        <label class="field">Track links
+          <textarea name="splinks" rows="4" required placeholder="https://open.spotify.com/track/…"></textarea>
+        </label>
+        <p class="muted hint" id="spcount"></p>
+        <button class="btn primary">Import songs</button>
+      </form>
       </div>
       <section>
         <div class="startbar">
@@ -768,34 +781,59 @@ document.addEventListener('input', e => {
     formImage = null;
     updatePreview();
   }
+  if (e.target.name === 'splinks') {
+    const n = countSpotifyTracks(e.target.value);
+    document.getElementById('spcount').textContent = e.target.value.trim()
+      ? (n ? `${n} song${n === 1 ? '' : 's'} found` : 'No Spotify track links found yet')
+      : '';
+  }
 });
 
-// Import a YouTube playlist (POST /api/participants/import)
-document.addEventListener('submit', e => {
-  if (e.target.id !== 'ytform') return;
-  e.preventDefault();
-  const url = e.target.elements.ytlist.value.trim();
-  if (!url) return;
-  const button = e.target.querySelector('button');
+// Same rule as the backend: track links or spotify:track: URIs, no repeats
+function countSpotifyTracks(text) {
+  const ids = text.match(/(?:open\.spotify\.com\/(?:intl-[a-z-]+\/)?track\/|spotify:track:)[A-Za-z0-9]{22}/g) || [];
+  return new Set(ids.map(s => s.slice(-22))).size;
+}
+
+// Shared by both import forms: call the endpoint, add the new participants,
+// name an untitled tournament after the playlist, report what happened.
+function runImport(form, request, noun) {
+  const button = form.querySelector('button');
+  const label = button.textContent;
   button.textContent = 'Importing…';
   run(async () => {
     try {
-      const result = await api.importPlaylist({ tournament_id: current.id, url });
+      const result = await request();
       current.participants.push(...result.added);
-      // Name an untitled tournament after the playlist
       if (current.name === 'Untitled tournament' && result.playlist_title) {
         const renamed = await api.updateTournament(current.id, { name: result.playlist_title.slice(0, 80) });
         current.name = renamed.name;
       }
-      let message = `Added ${result.added.length} video${result.added.length === 1 ? '' : 's'}.`;
-      if (result.skipped_unavailable) message += ` Skipped ${result.skipped_unavailable} private/deleted.`;
+      let message = `Added ${result.added.length} ${noun}${result.added.length === 1 ? '' : 's'}.`;
+      if (result.skipped_unavailable) message += ` Skipped ${result.skipped_unavailable} unavailable.`;
       if (result.truncated) message += ' Stopped at the 256 participant limit.';
       toast(message);
       render();
     } finally {
-      if (button.isConnected) button.textContent = 'Import videos';
+      if (button.isConnected) button.textContent = label;
     }
   });
+}
+
+document.addEventListener('submit', e => {
+  // YouTube playlist (POST /api/participants/import/youtube)
+  if (e.target.id === 'ytform') {
+    e.preventDefault();
+    const url = e.target.elements.ytlist.value.trim();
+    if (url) runImport(e.target, () => api.importYoutube({ tournament_id: current.id, url }), 'video');
+  }
+  // Spotify track links (POST /api/participants/import/spotify)
+  if (e.target.id === 'spform') {
+    e.preventDefault();
+    const links = e.target.elements.splinks.value;
+    if (!countSpotifyTracks(links)) return toast('No Spotify track links found in that text.', true);
+    runImport(e.target, () => api.importSpotify({ tournament_id: current.id, links }), 'song');
+  }
 });
 
 document.addEventListener('submit', e => {

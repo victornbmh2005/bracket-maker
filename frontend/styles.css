@@ -194,3 +194,18 @@ body.busy button, body.busy .btn { pointer-events: none; opacity: .7; }
 /* Setup side column: add form + playlist import */
 .side { display: flex; flex-direction: column; gap: 16px; }
 .hint { font-size: 13px; margin: -4px 0 12px; }
+
+/* Spotify import form */
+textarea {
+  display: block; width: 100%; margin-top: 4px; resize: vertical;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 9px 11px; font: inherit; font-size: 13px;
+}
+textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+.steps { padding-left: 18px; margin: 0 0 12px; }
+.steps li { margin-bottom: 2px; }
+kbd {
+  font: 600 11px Inter, system-ui, sans-serif; color: var(--text);
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px;
+}

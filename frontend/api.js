@@ -40,6 +40,7 @@ const api = (() => {
     getParticipant: id => request('GET', `/participants/${enc(id)}`),
     updateParticipant: (id, data) => request('PATCH', `/participants/${enc(id)}`, data),
     deleteParticipant: id => request('DELETE', `/participants/${enc(id)}`),
-    importPlaylist: data => request('POST', '/participants/import', data),
+    importYoutube: data => request('POST', '/participants/import/youtube', data),
+    importSpotify: data => request('POST', '/participants/import/spotify', data),
   };
 })();
