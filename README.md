@@ -58,6 +58,17 @@ Needs Node.js 20.6 or newer.
    npx serve frontend -l 5173  # site on http://localhost:5173
    ```
 
+## Tests
+
+```sh
+cd backend
+npm test
+```
+
+The tests use a separate Neon **branch** so they never touch real data. Put its connection string in `backend/.env`
+as `TEST_DATABASE_URL`; the tests refuse to run without it or if it matches `DATABASE_URL`. GitHub Actions runs the
+same tests on every push (`.github/workflows/test.yml`), using the `TEST_DATABASE_URL` repository secret.
+
 ## Deploy
 
 1. Push the repo to GitHub.

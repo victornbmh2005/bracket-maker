@@ -1,11 +1,9 @@
-// Creates the tables from db/schema.sql. Usage: npm run migrate
-import { readFile } from 'node:fs/promises';
+// Creates the tables. Usage: npm run migrate
 import { pool } from '../src/db.js';
-
-const sql = await readFile(new URL('../db/schema.sql', import.meta.url), 'utf8');
+import { migrate } from '../src/migrate.js';
 
 try {
-  await pool.query(sql);
+  await migrate(pool);
   console.log('Database schema is up to date.');
 } catch (err) {
   console.error('Migration failed:', err.message);
