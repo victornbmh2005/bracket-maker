@@ -22,11 +22,17 @@ export async function startApi() {
 
   // call('POST', '/tournaments', {name}) → {status, data, headers}
   async function call(method, path, body, headers = {}) {
-    const res = await fetch(base + path, {
-      method,
-      headers: body === undefined ? headers : { 'Content-Type': 'application/json', ...headers },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    let res;
+    try {
+      res = await fetch(base + path, {
+        method,
+        headers: body === undefined ? headers : { 'Content-Type': 'application/json', ...headers },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    } catch (err) {
+      // "fetch failed" alone says nothing; include the network error underneath
+      throw new Error(`${method} ${path}: ${err.message} (${err.cause?.code ?? err.cause?.message ?? 'no cause'})`);
+    }
     const text = await res.text();
     return { status: res.status, data: text ? JSON.parse(text) : null, headers: res.headers };
   }

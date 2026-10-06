@@ -24,6 +24,10 @@ export default {
     { name: 'Tournaments', description: 'The tournaments table' },
     { name: 'Participants', description: 'The participants table' },
     { name: 'Runs', description: 'The runs table: each run is one bracket of a tournament' },
+    { name: 'Rating lists', description: 'The rating_lists table (ratings mode)' },
+    { name: 'Rating criteria', description: 'The rating_criteria table: what each item is rated on' },
+    { name: 'Rating items', description: 'The rating_items table: the things being rated' },
+    { name: 'Ratings', description: 'The ratings table: one 1–10 score per item per criterion' },
     { name: 'Health' },
   ],
 
@@ -268,6 +272,153 @@ export default {
         responses: { 204: { description: 'Deleted' }, 404: resp('NotFound'), 409: resp('Conflict') },
       },
     },
+
+    // ---------- Ratings mode ----------
+    '/api/rating-lists': {
+      post: {
+        tags: ['Rating lists'],
+        summary: 'Create a rating list',
+        description: 'Optionally with criteria names (max 20). The site sends a preset, e.g. Songs: Instruments, Vocals, Lyrics, Production, Replay value.',
+        requestBody: { required: true, ...json(ref('RatingListCreate')) },
+        responses: { 201: { description: 'Created', ...json(ref('RatingListDetail')) }, 400: resp('BadRequest') },
+      },
+      get: {
+        tags: ['Rating lists'],
+        summary: 'List rating lists by id (summaries with scores)',
+        description: 'Like tournaments, there is no "list all": knowing the id is what gives access.',
+        parameters: [{ name: 'ids', in: 'query', required: true, description: 'Comma-separated list ids (max 100)', schema: { type: 'string' } }],
+        responses: { 200: { description: 'OK', ...json({ type: 'array', items: ref('RatingListSummary') }) } },
+      },
+    },
+    '/api/rating-lists/{id}': {
+      parameters: [idParam('Rating list id')],
+      get: {
+        tags: ['Rating lists'],
+        summary: 'Get a list with its criteria, items, scores and averages',
+        responses: { 200: { description: 'OK', ...json(ref('RatingListDetail')) }, 404: resp('NotFound') },
+      },
+      patch: {
+        tags: ['Rating lists'],
+        summary: 'Rename a list',
+        requestBody: { required: true, ...json({ type: 'object', required: ['name'], properties: { name: { type: 'string', maxLength: 80, example: 'Best songs of 2026' } } }) },
+        responses: { 200: { description: 'Updated', ...json(ref('RatingListDetail')) }, 400: resp('BadRequest'), 404: resp('NotFound') },
+      },
+      delete: {
+        tags: ['Rating lists'],
+        summary: 'Delete a list (and its criteria, items and scores)',
+        responses: { 204: { description: 'Deleted' }, 404: resp('NotFound') },
+      },
+    },
+
+    '/api/rating-criteria': {
+      post: {
+        tags: ['Rating criteria'],
+        summary: 'Add a criterion to a list',
+        requestBody: { required: true, ...json({ type: 'object', required: ['list_id', 'name'], properties: { list_id: uuid, name: { type: 'string', maxLength: 40, example: 'Vocals' } } }) },
+        responses: { 201: { description: 'Created', ...json(ref('RatingCriterion')) }, 400: resp('BadRequest'), 404: resp('NotFound') },
+      },
+      get: {
+        tags: ['Rating criteria'],
+        summary: "List a list's criteria",
+        parameters: [{ name: 'list_id', in: 'query', required: true, schema: uuid }],
+        responses: { 200: { description: 'OK, ordered by position', ...json({ type: 'array', items: ref('RatingCriterion') }) }, 400: resp('BadRequest'), 404: resp('NotFound') },
+      },
+    },
+    '/api/rating-criteria/{id}': {
+      parameters: [idParam('Criterion id')],
+      get: {
+        tags: ['Rating criteria'],
+        summary: 'Get a criterion',
+        responses: { 200: { description: 'OK', ...json(ref('RatingCriterion')) }, 404: resp('NotFound') },
+      },
+      patch: {
+        tags: ['Rating criteria'],
+        summary: 'Rename and/or move a criterion',
+        requestBody: { required: true, ...json({ type: 'object', properties: { name: { type: 'string', maxLength: 40, example: 'Production' }, position: { type: 'integer', minimum: 0 } } }) },
+        responses: { 200: { description: 'Updated', ...json(ref('RatingCriterion')) }, 400: resp('BadRequest'), 404: resp('NotFound') },
+      },
+      delete: {
+        tags: ['Rating criteria'],
+        summary: 'Delete a criterion (its scores go with it)',
+        responses: { 204: { description: 'Deleted' }, 404: resp('NotFound') },
+      },
+    },
+
+    '/api/rating-items': {
+      post: {
+        tags: ['Rating items'],
+        summary: 'Add an item to a list',
+        requestBody: { required: true, ...json(ref('RatingItemCreate')) },
+        responses: { 201: { description: 'Created', ...json(ref('RatingItem')) }, 400: resp('BadRequest'), 404: resp('NotFound') },
+      },
+      get: {
+        tags: ['Rating items'],
+        summary: "List a list's items (without scores)",
+        parameters: [{ name: 'list_id', in: 'query', required: true, schema: uuid }],
+        responses: { 200: { description: 'OK, ordered by position', ...json({ type: 'array', items: ref('RatingItem') }) }, 400: resp('BadRequest'), 404: resp('NotFound') },
+      },
+    },
+    '/api/rating-items/import/youtube': {
+      post: {
+        tags: ['Rating items'],
+        summary: 'Import a YouTube playlist as items',
+        description: 'Same as the participant import, but into a rating list. Max 256 items per list.',
+        requestBody: { required: true, ...json({ type: 'object', required: ['list_id', 'url'], properties: { list_id: uuid, url: { type: 'string', example: 'https://www.youtube.com/playlist?list=PASTE_A_PLAYLIST_ID' } } }) },
+        responses: { 201: { description: 'Imported', ...json(ref('PlaylistImportResult')) }, 400: resp('BadRequest'), 404: resp('NotFound') },
+      },
+    },
+    '/api/rating-items/import/spotify': {
+      post: {
+        tags: ['Rating items'],
+        summary: 'Import Spotify tracks from pasted links as items',
+        requestBody: { required: true, ...json({ type: 'object', required: ['list_id', 'links'], properties: { list_id: uuid, links: { type: 'string', example: 'https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC' } } }) },
+        responses: { 201: { description: 'Imported', ...json(ref('PlaylistImportResult')) }, 400: resp('BadRequest'), 404: resp('NotFound') },
+      },
+    },
+    '/api/rating-items/{id}': {
+      parameters: [idParam('Item id')],
+      get: {
+        tags: ['Rating items'],
+        summary: 'Get an item with its scores and average',
+        responses: { 200: { description: 'OK', ...json(ref('RatedItem')) }, 404: resp('NotFound') },
+      },
+      patch: {
+        tags: ['Rating items'],
+        summary: 'Update an item',
+        requestBody: { required: true, ...json(ref('ParticipantUpdate')) },
+        responses: { 200: { description: 'Updated', ...json(ref('RatingItem')) }, 400: resp('BadRequest'), 404: resp('NotFound') },
+      },
+      delete: {
+        tags: ['Rating items'],
+        summary: 'Delete an item (its scores go with it)',
+        responses: { 204: { description: 'Deleted' }, 404: resp('NotFound') },
+      },
+    },
+
+    '/api/ratings': {
+      get: {
+        tags: ['Ratings'],
+        summary: 'Every score in a list',
+        parameters: [{ name: 'list_id', in: 'query', required: true, schema: uuid }],
+        responses: { 200: { description: 'OK', ...json({ type: 'array', items: ref('Rating') }) }, 400: resp('BadRequest'), 404: resp('NotFound') },
+      },
+      put: {
+        tags: ['Ratings'],
+        summary: 'Set a score (creates it or replaces the old one)',
+        description: 'The item and criterion must belong to the same list. Answers with the updated averages.',
+        requestBody: { required: true, ...json({ type: 'object', required: ['item_id', 'criterion_id', 'score'], properties: { item_id: uuid, criterion_id: uuid, score: { type: 'integer', minimum: 1, maximum: 10, example: 8 } } }) },
+        responses: { 200: { description: 'Saved', ...json(ref('RatingChange')) }, 400: resp('BadRequest'), 404: resp('NotFound') },
+      },
+      delete: {
+        tags: ['Ratings'],
+        summary: 'Clear a score',
+        parameters: [
+          { name: 'item_id', in: 'query', required: true, schema: uuid },
+          { name: 'criterion_id', in: 'query', required: true, schema: uuid },
+        ],
+        responses: { 200: { description: 'Cleared; answers with the updated averages', ...json(ref('RatingChange')) }, 400: resp('BadRequest'), 404: resp('NotFound') },
+      },
+    },
   },
 
   components: {
@@ -497,6 +648,98 @@ export default {
           name: { type: 'string', maxLength: 80, example: 'Best movies ever' },
         },
         example: { name: 'Best movies ever' },
+      },
+      RatingListCreate: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', maxLength: 80, example: 'My 2026 playlist' },
+          criteria: { type: 'array', maxItems: 20, items: { type: 'string', maxLength: 40 }, example: ['Instruments', 'Vocals', 'Lyrics', 'Production', 'Replay value'] },
+        },
+      },
+      RatingSummary: {
+        type: 'object',
+        properties: {
+          score: { type: 'number', nullable: true, description: 'Average of the item scores, 1 decimal', example: 7.4 },
+          item_count: { type: 'integer' },
+          criteria_count: { type: 'integer' },
+          rated_items: { type: 'integer', description: 'Items with at least one score' },
+          complete_items: { type: 'integer', description: 'Items scored on every criterion' },
+        },
+      },
+      RatingListSummary: {
+        allOf: [
+          { type: 'object', properties: { id: uuid, name: { type: 'string' }, created_at: { type: 'string', format: 'date-time' }, updated_at: { type: 'string', format: 'date-time' } } },
+          ref('RatingSummary'),
+          { type: 'object', properties: { preview: { type: 'array', description: 'First 4 items', items: { type: 'object', properties: { id: uuid, name: { type: 'string' }, image: { type: 'string' } } } } } },
+        ],
+      },
+      RatingListDetail: {
+        type: 'object',
+        properties: {
+          id: uuid,
+          name: { type: 'string' },
+          created_at: { type: 'string', format: 'date-time' },
+          updated_at: { type: 'string', format: 'date-time' },
+          criteria: {
+            type: 'array',
+            items: { allOf: [ref('RatingCriterion'), { type: 'object', properties: { average: { type: 'number', nullable: true }, rated: { type: 'integer' } } }] },
+          },
+          items: { type: 'array', items: ref('RatedItem') },
+          summary: ref('RatingSummary'),
+        },
+      },
+      RatingCriterion: {
+        type: 'object',
+        properties: { id: uuid, list_id: uuid, name: { type: 'string', example: 'Vocals' }, position: { type: 'integer' } },
+      },
+      RatingItem: {
+        type: 'object',
+        properties: {
+          id: uuid,
+          list_id: uuid,
+          name: { type: 'string', example: 'Mr. Brightside' },
+          image: { type: 'string' },
+          link: { type: 'string', example: 'https://open.spotify.com/track/3n3Ppam7vgaVa1iaRUc9Lp' },
+          position: { type: 'integer' },
+          created_at: { type: 'string', format: 'date-time' },
+        },
+      },
+      RatingItemCreate: {
+        type: 'object',
+        required: ['list_id', 'name'],
+        properties: {
+          list_id: uuid,
+          name: { type: 'string', maxLength: 80, example: 'Mr. Brightside' },
+          image: { type: 'string' },
+          link: { type: 'string', example: 'https://open.spotify.com/track/3n3Ppam7vgaVa1iaRUc9Lp' },
+        },
+      },
+      RatedItem: {
+        allOf: [
+          ref('RatingItem'),
+          {
+            type: 'object',
+            properties: {
+              scores: { type: 'object', additionalProperties: { type: 'integer' }, description: '{criterion_id: score}' },
+              score: { type: 'number', nullable: true, description: 'Average of this item’s scores' },
+              rated: { type: 'integer', description: 'How many criteria have a score' },
+              complete: { type: 'boolean', description: 'Scored on every criterion' },
+            },
+          },
+        ],
+      },
+      Rating: {
+        type: 'object',
+        properties: { item_id: uuid, criterion_id: uuid, score: { type: 'integer', minimum: 1, maximum: 10 }, updated_at: { type: 'string', format: 'date-time' } },
+      },
+      RatingChange: {
+        type: 'object',
+        properties: {
+          rating: ref('Rating'),
+          item: { type: 'object', properties: { id: uuid, scores: { type: 'object' }, score: { type: 'number', nullable: true }, rated: { type: 'integer' }, complete: { type: 'boolean' } } },
+          criterion: { type: 'object', properties: { id: uuid, average: { type: 'number', nullable: true }, rated: { type: 'integer' } } },
+          summary: ref('RatingSummary'),
+        },
       },
       Error: {
         type: 'object',

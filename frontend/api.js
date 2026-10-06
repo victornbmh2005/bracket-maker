@@ -52,5 +52,30 @@ const api = (() => {
     deleteParticipant: id => request('DELETE', `/participants/${enc(id)}`),
     importYoutube: data => request('POST', '/participants/import/youtube', data),
     importSpotify: data => request('POST', '/participants/import/spotify', data),
+
+    // Ratings mode
+    createRatingList: data => request('POST', '/rating-lists', data),
+    listRatingLists: ids => request('GET', '/rating-lists?ids=' + ids.map(enc).join(',')),
+    getRatingList: id => request('GET', `/rating-lists/${enc(id)}`),
+    updateRatingList: (id, data) => request('PATCH', `/rating-lists/${enc(id)}`, data),
+    deleteRatingList: id => request('DELETE', `/rating-lists/${enc(id)}`),
+
+    createCriterion: data => request('POST', '/rating-criteria', data),
+    listCriteria: listId => request('GET', '/rating-criteria?list_id=' + enc(listId)),
+    getCriterion: id => request('GET', `/rating-criteria/${enc(id)}`),
+    updateCriterion: (id, data) => request('PATCH', `/rating-criteria/${enc(id)}`, data),
+    deleteCriterion: id => request('DELETE', `/rating-criteria/${enc(id)}`),
+
+    createRatingItem: data => request('POST', '/rating-items', data),
+    listRatingItems: listId => request('GET', '/rating-items?list_id=' + enc(listId)),
+    getRatingItem: id => request('GET', `/rating-items/${enc(id)}`),
+    updateRatingItem: (id, data) => request('PATCH', `/rating-items/${enc(id)}`, data),
+    deleteRatingItem: id => request('DELETE', `/rating-items/${enc(id)}`),
+    importRatingYoutube: data => request('POST', '/rating-items/import/youtube', data),
+    importRatingSpotify: data => request('POST', '/rating-items/import/spotify', data),
+
+    listScores: listId => request('GET', '/ratings?list_id=' + enc(listId)),
+    setScore: data => request('PUT', '/ratings', data),
+    clearScore: (itemId, criterionId) => request('DELETE', `/ratings?item_id=${enc(itemId)}&criterion_id=${enc(criterionId)}`),
   };
 })();

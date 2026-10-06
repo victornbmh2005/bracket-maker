@@ -8,6 +8,10 @@ import { HttpError } from './validate.js';
 import tournaments from './routes/tournaments.js';
 import participants from './routes/participants.js';
 import runs from './routes/runs.js';
+import ratingLists from './routes/rating-lists.js';
+import ratingCriteria from './routes/rating-criteria.js';
+import ratingItems from './routes/rating-items.js';
+import ratings from './routes/ratings.js';
 
 export const app = express();
 
@@ -35,6 +39,10 @@ app.get('/api/health', async (req, res) => {
 app.use('/api/tournaments', tournaments);
 app.use('/api/participants', participants);
 app.use('/api/runs', runs);
+app.use('/api/rating-lists', ratingLists);
+app.use('/api/rating-criteria', ratingCriteria);
+app.use('/api/rating-items', ratingItems);
+app.use('/api/ratings', ratings);
 
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
 

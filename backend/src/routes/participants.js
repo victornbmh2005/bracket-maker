@@ -11,8 +11,7 @@
 import { Router } from 'express';
 import { pool, withTransaction } from '../db.js';
 import { HttpError, isUuid, requireUuid, cleanName, cleanImage, cleanLink, cleanPosition } from '../validate.js';
-import { parsePlaylistId, fetchPlaylist } from '../youtube.js';
-import { parseTrackIds, fetchTracks } from '../spotify.js';
+import { requirePlaylistId, requireTrackIds, fetchYoutubeItems, fetchSpotifyItems, bulkInsert } from '../imports.js';
 
 const router = Router();
 const NOT_FOUND = 'Participant not found';
@@ -85,71 +84,44 @@ async function roomLeft(tournamentId) {
 }
 
 // Adds [{name, image, link}] after the existing participants, in one INSERT.
-// Returns the created rows, ordered.
 async function insertMany(tournamentId, items) {
   return withTransaction(async client => {
     await lockEditableTournament(client, tournamentId);
     const { rows: [{ count, next }] } = await client.query(ACTIVE_COUNT, [tournamentId]);
     const fit = items.slice(0, Math.max(0, MAX_PARTICIPANTS - count));
     if (!fit.length) throw new HttpError(400, `A tournament can have at most ${MAX_PARTICIPANTS} participants`);
-    const { rows } = await client.query(
-      `INSERT INTO participants (tournament_id, name, image, link, position)
-       SELECT $1, n, i, l, p FROM unnest($2::text[], $3::text[], $4::text[], $5::int[]) AS x(n, i, l, p)
-       RETURNING ${COLUMNS}`,
-      [
-        tournamentId,
-        fit.map(it => it.name),
-        fit.map(it => it.image),
-        fit.map(it => it.link),
-        fit.map((it, k) => next + k),
-      ]
-    );
-    return rows.sort((a, b) => a.position - b.position);
+    return bulkInsert(client, {
+      table: 'participants', parentColumn: 'tournament_id', parentId: tournamentId,
+      start: next, items: fit, columns: COLUMNS,
+    });
+  });
+}
+
+async function respondImport(res, tournamentId, fetched) {
+  const added = await insertMany(tournamentId, fetched.items);
+  res.status(201).json({
+    playlist_title: fetched.title,
+    added,
+    skipped_unavailable: fetched.unavailable,
+    truncated: fetched.truncated || added.length < fetched.items.length,
   });
 }
 
 // Import a YouTube playlist: every available video becomes a participant.
 router.post('/import/youtube', async (req, res) => {
   const body = req.body ?? {};
-  const playlistId = parsePlaylistId(body.url);
-  if (!playlistId) throw new HttpError(400, 'That is not a YouTube playlist link (it should contain "list=")');
+  const playlistId = requirePlaylistId(body.url);
   const room = await roomLeft(body.tournament_id);
-
-  const playlist = await fetchPlaylist(playlistId, room);
-  if (!playlist.items.length) throw new HttpError(400, 'That playlist has no available videos');
-  const added = await insertMany(body.tournament_id, playlist.items);
-
-  res.status(201).json({
-    playlist_title: playlist.title,
-    added,
-    skipped_unavailable: playlist.unavailable,
-    truncated: playlist.truncated || added.length < playlist.items.length,
-  });
+  await respondImport(res, body.tournament_id, await fetchYoutubeItems(playlistId, room));
 });
 
 // Import Spotify tracks from pasted links (copied from a playlist in the
 // Spotify desktop app with Ctrl+A, Ctrl+C).
 router.post('/import/spotify', async (req, res) => {
   const body = req.body ?? {};
-  if (typeof body.links !== 'string' || body.links.length > 200_000) {
-    throw new HttpError(400, 'links must be text with Spotify track links');
-  }
-  const ids = parseTrackIds(body.links);
-  if (!ids.length) {
-    throw new HttpError(400, 'No Spotify track links found. They look like https://open.spotify.com/track/…');
-  }
+  const ids = requireTrackIds(body.links);
   const room = await roomLeft(body.tournament_id);
-
-  const tracks = await fetchTracks(ids.slice(0, room));
-  if (!tracks.items.length) throw new HttpError(400, "Spotify didn't recognize any of those tracks");
-  const added = await insertMany(body.tournament_id, tracks.items);
-
-  res.status(201).json({
-    playlist_title: '',
-    added,
-    skipped_unavailable: tracks.unavailable,
-    truncated: ids.length > room || added.length < tracks.items.length,
-  });
+  await respondImport(res, body.tournament_id, await fetchSpotifyItems(ids, room));
 });
 
 // List (one tournament's participants).

@@ -9,11 +9,15 @@ uploaded file) and an optional link. Then pick the winner of each matchup until 
   (random participants sit out, and whoever sat out before plays first) or **everyone plays** (with a play-in
   round when the count isn't a power of 2).
 - **Stats** add up across runs: titles, win rate, W–L, best finish, times sat out. **History** keeps every run.
+- **Ratings mode:** make a list (e.g. a playlist), pick criteria (presets for songs and movies, all editable), and
+  score each item 1–10 per criterion, in the list or full screen one by one with keyboard shortcuts. Each item
+  gets an average, each criterion an average, and the whole list an overall rating.
 
 ## How it's organized
 
 ```
 frontend/   Plain HTML + CSS + JavaScript (no build step)   → hosted on Vercel
+            core.js (shared) · tournaments.js · ratings.js
 backend/    Node.js + Express REST API                       → hosted on Render
             backend/db/migrations/ holds the database tables → PostgreSQL on Neon
 ```
@@ -27,6 +31,10 @@ The browser only talks to the backend, and only the backend talks to the databas
 | tournaments  | `POST /api/tournaments`  | `GET /api/tournaments?ids=a,b`              | `GET /api/tournaments/:id`  | `PATCH /api/tournaments/:id`  | `DELETE /api/tournaments/:id`  |
 | participants | `POST /api/participants` | `GET /api/participants?tournament_id=…`     | `GET /api/participants/:id` | `PATCH /api/participants/:id` | `DELETE /api/participants/:id` |
 | runs         | `POST /api/runs`         | `GET /api/runs?tournament_id=…`             | `GET /api/runs/:id`         | `PATCH /api/runs/:id`         | `DELETE /api/runs/:id`         |
+| rating_lists | `POST /api/rating-lists` | `GET /api/rating-lists?ids=a,b`             | `GET /api/rating-lists/:id` | `PATCH /api/rating-lists/:id` | `DELETE /api/rating-lists/:id` |
+| rating_criteria | `POST /api/rating-criteria` | `GET /api/rating-criteria?list_id=…`  | `GET /api/rating-criteria/:id` | `PATCH /api/rating-criteria/:id` | `DELETE /api/rating-criteria/:id` |
+| rating_items | `POST /api/rating-items` | `GET /api/rating-items?list_id=…`           | `GET /api/rating-items/:id` | `PATCH /api/rating-items/:id` | `DELETE /api/rating-items/:id` |
+| ratings      | `PUT /api/ratings` (create or replace) | `GET /api/ratings?list_id=…`  | –                           | `PUT /api/ratings`            | `DELETE /api/ratings?item_id=…&criterion_id=…` |
 
 Also: `GET /api/runs/options?tournament_id=…` (bracket sizes) and `GET /api/tournaments/:id/stats`.
 
